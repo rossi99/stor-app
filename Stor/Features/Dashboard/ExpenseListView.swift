@@ -68,9 +68,15 @@ struct ExpenseListView: View {
 struct ExpenseRow: View {
     let expense: Expense
     let members: [Member]
+    var showAddedBy: Bool = false
 
     private var addedByName: String {
         members.first { $0.id == expense.addedBy }?.firstName ?? "Unknown"
+    }
+
+    private var subtitle: String {
+        if showAddedBy { return "Requested by \(addedByName)" }
+        return "\(expense.category.rawValue) · \(expense.frequency.rawValue.lowercased())"
     }
 
     var body: some View {
@@ -88,20 +94,20 @@ struct ExpenseRow: View {
                 HStack(spacing: Spacing.xs) {
                     Text(expense.name)
                         .font(.subheadline.weight(.medium))
-                    if !expense.approvalStatus.isApproved {
+                    if !expense.approvalStatus.isApproved && !showAddedBy {
                         Image(systemName: "clock.fill")
                             .font(.caption2)
                             .foregroundStyle(.orange)
                     }
                 }
-                Text("\(expense.category.rawValue) · \(expense.frequency.rawValue.lowercased())")
+                Text(subtitle)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
             Spacer()
 
-            VStack(alignment: .trailing, spacing: 2) {
+            HStack(alignment: .firstTextBaseline, spacing: 2) {
                 Text(expense.monthlyAmount.gbpRounded)
                     .font(.storTabular(.subheadline, weight: .semibold))
                 Text("/mo")

@@ -3,7 +3,6 @@ import SwiftUI
 struct DashboardView: View {
     @Environment(AppState.self) private var appState
     @State private var showExpenseList = false
-    @State private var showForecast    = false
 
     var body: some View {
         NavigationStack {
@@ -34,25 +33,6 @@ struct DashboardView: View {
                         onShowExpenses: { showExpenseList = true }
                     )
                     .padding(.horizontal, Spacing.md)
-
-                    Button {
-                        showForecast = true
-                    } label: {
-                        HStack {
-                            Image(systemName: "chart.line.uptrend.xyaxis")
-                                .foregroundStyle(Color.storAccent)
-                            Text("Open Forecast")
-                                .font(.subheadline.weight(.medium))
-                            Spacer()
-                            Image(systemName: "chevron.right")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.secondary)
-                        }
-                        .padding(Spacing.md)
-                        .storCard()
-                    }
-                    .buttonStyle(.plain)
-                    .padding(.horizontal, Spacing.md)
                 }
                 .padding(.vertical, Spacing.md)
             }
@@ -61,9 +41,6 @@ struct DashboardView: View {
         }
         .sheet(isPresented: $showExpenseList) {
             ExpenseListView()
-        }
-        .sheet(isPresented: $showForecast) {
-            ForecastView(isPresentedAsSheet: true)
         }
     }
 }

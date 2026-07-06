@@ -43,6 +43,7 @@ struct SavingsView: View {
             .background(Color.storBackground)
             .toolbar(.hidden, for: .navigationBar)
         }
+        .statusBarGradient()
     }
 }
 

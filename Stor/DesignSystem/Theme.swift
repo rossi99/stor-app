@@ -87,6 +87,25 @@ extension Color {
     )
 }
 
+extension View {
+    /// Adds a gradient fade from `storBackground` over the status-bar safe area,
+    /// preventing scroll content from bleeding visually behind the clock/battery.
+    func statusBarGradient(_ active: Bool = true) -> some View {
+        overlay(alignment: .top) {
+            if active {
+                LinearGradient(
+                    colors: [Color.storBackground, Color.storBackground.opacity(0)],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .frame(height: 80)
+                .ignoresSafeArea(edges: .top)
+                .allowsHitTesting(false)
+            }
+        }
+    }
+}
+
 // Allows `.storX` in ShapeStyle contexts (foregroundStyle, fill, tint, etc.)
 extension ShapeStyle where Self == Color {
     static var storAccent:         Color { Color.storAccent }

@@ -39,6 +39,7 @@ struct DashboardView: View {
             .background(Color.storBackground)
             .toolbar(.hidden, for: .navigationBar)
         }
+        .statusBarGradient()
         .sheet(isPresented: $showExpenseList) {
             ExpenseListView()
         }

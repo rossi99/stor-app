@@ -83,6 +83,7 @@ struct ForecastView: View {
                 }
             }
         }
+        .statusBarGradient(!isPresentedAsSheet)
     }
 
     private var surplusComparisonCard: some View {

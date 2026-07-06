@@ -108,10 +108,11 @@ private struct FrameworkSplitBar: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
             GeometryReader { geo in
+                let available = geo.size.width - CGFloat(segments.count - 1) * 2
                 HStack(spacing: 2) {
                     ForEach(segments) { segment in
                         segment.color
-                            .frame(width: max(0, geo.size.width * CGFloat(segment.percent)) - 2)
+                            .frame(width: max(0, available * CGFloat(segment.percent)))
                     }
                 }
             }

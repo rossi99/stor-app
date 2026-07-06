@@ -8,6 +8,11 @@ struct AllocationRow: View {
     /// Budget carried in from the previous bucket: positive = inherited extra,
     /// negative = surrendered to cover an earlier overspend.
     var carryOver: Double = 0
+    /// Amount leaving this bucket into the next one. When nil this is the last
+    /// bucket and the remainder is labelled as surplus instead.
+    var carryForward: Double? = nil
+    /// Name of the next bucket (e.g. "Wants"). Nil for the savings row.
+    var nextBucketLabel: String? = nil
 
     private var actualFraction: Double {
         guard expectedAmount > 0 else { return actualAmount > 0 ? 1 : 0 }
@@ -83,6 +88,29 @@ struct AllocationRow: View {
                 .animation(.easeInOut(duration: 0.4), value: surplusFraction)
             }
             .frame(height: barHeight)
+
+            if let forward = carryForward, abs(forward) >= 1 {
+                let isPositive = forward >= 0
+                HStack(spacing: 4) {
+                    Image(systemName: isPositive ? "arrow.up.circle.fill" : "arrow.down.circle.fill")
+                        .font(.caption2)
+                        .foregroundStyle(isPositive ? Color.storPositive : Color.storNegative)
+                    if let next = nextBucketLabel {
+                        (Text(isPositive ? "+" : "")
+                         + Text(forward.gbpRounded)
+                         + Text(" to \(next)"))
+                        .font(.storTabular(.caption2))
+                        .foregroundStyle(isPositive ? Color.storPositive : Color.storNegative)
+                    } else {
+                        (Text(isPositive ? "+" : "")
+                         + Text(forward.gbpRounded)
+                         + Text(isPositive ? " surplus remaining" : " deficit"))
+                        .font(.storTabular(.caption2))
+                        .foregroundStyle(isPositive ? Color.storPositive : Color.storNegative)
+                    }
+                    Spacer()
+                }
+            }
         }
     }
 }

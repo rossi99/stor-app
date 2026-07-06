@@ -146,21 +146,26 @@ struct MonthlyExpensesCard: View {
                     label: "Needs",
                     expectedAmount: needsBudget,
                     actualAmount: actual(for: .needs),
-                    color: .progressNeeds
+                    color: .progressNeeds,
+                    carryForward: needsBudget - actual(for: .needs),
+                    nextBucketLabel: "Wants"
                 )
                 AllocationRow(
                     label: "Wants",
                     expectedAmount: wantsBudget,
                     actualAmount: actual(for: .wants),
                     color: .progressWants,
-                    carryOver: needsBudget - actual(for: .needs)
+                    carryOver: needsBudget - actual(for: .needs),
+                    carryForward: wantsBudget - actual(for: .wants),
+                    nextBucketLabel: "Savings"
                 )
                 AllocationRow(
                     label: "Savings",
                     expectedAmount: savingsBudget,
                     actualAmount: actual(for: .savings),
                     color: .progressSavings,
-                    carryOver: wantsBudget - actual(for: .wants)
+                    carryOver: wantsBudget - actual(for: .wants),
+                    carryForward: savingsBudget - actual(for: .savings)
                 )
             }
         }

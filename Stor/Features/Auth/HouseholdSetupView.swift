@@ -178,10 +178,9 @@ struct FrameworkOptionRow: View {
     }
 }
 
-#Preview("Dark – Join") {
+#Preview("Join") {
     NavigationStack {
         HouseholdSetupView(mode: .join)
             .environment(AppState())
-            .preferredColorScheme(.dark)
     }
 }

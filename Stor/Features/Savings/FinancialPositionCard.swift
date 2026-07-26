@@ -77,10 +77,3 @@ private struct PositionLegend: View {
         .padding()
         .background(Color.storBackground)
 }
-
-#Preview("Dark") {
-    FinancialPositionCard(position: MockData.financialPosition)
-        .padding()
-        .background(Color.storBackground)
-        .preferredColorScheme(.dark)
-}

@@ -50,9 +50,3 @@ struct DashboardView: View {
     DashboardView()
         .environment(AppState())
 }
-
-#Preview("Dark") {
-    DashboardView()
-        .environment(AppState())
-        .preferredColorScheme(.dark)
-}

@@ -82,9 +82,3 @@ struct SignInView: View {
     SignInView()
         .environment(AppState())
 }
-
-#Preview("Dark") {
-    SignInView()
-        .environment(AppState())
-        .preferredColorScheme(.dark)
-}

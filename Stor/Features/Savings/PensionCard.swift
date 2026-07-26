@@ -56,14 +56,3 @@ struct PensionCard: View {
     .padding()
     .background(Color.storBackground)
 }
-
-#Preview("Dark") {
-    VStack(spacing: Spacing.md) {
-        ForEach(MockData.pensions) { p in
-            PensionCard(pension: p)
-        }
-    }
-    .padding()
-    .background(Color.storBackground)
-    .preferredColorScheme(.dark)
-}

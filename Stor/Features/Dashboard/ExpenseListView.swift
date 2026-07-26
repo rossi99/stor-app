@@ -138,9 +138,3 @@ struct ExpenseRow: View {
     ExpenseListView()
         .environment(AppState())
 }
-
-#Preview("Dark") {
-    ExpenseListView()
-        .environment(AppState())
-        .preferredColorScheme(.dark)
-}

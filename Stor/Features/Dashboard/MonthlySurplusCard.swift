@@ -98,10 +98,3 @@ private struct MemberSurplus: Identifiable {
         .padding()
         .background(Color.storBackground)
 }
-
-#Preview("Dark") {
-    MonthlySurplusCard(incomes: MockData.incomes, expenses: MockData.expenses)
-        .padding()
-        .background(Color.storBackground)
-        .preferredColorScheme(.dark)
-}

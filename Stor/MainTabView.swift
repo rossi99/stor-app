@@ -21,13 +21,27 @@ struct MainTabView: View {
     }
 }
 
-#Preview {
+#Preview("Populated") {
     MainTabView()
         .environment(AppState())
 }
 
-#Preview("Dark") {
+#Preview("Empty State") {
+    let appState: AppState = {
+        let state = AppState()
+        state.expenses = []
+        state.previousMonthExpenses = 0
+        state.savingsPots = []
+        state.pensions = []
+        state.isas = []
+        state.financialPosition = FinancialPosition(
+            monthlyIncome: state.householdNetMonthly,
+            monthlyExpenses: 0,
+            monthlySavings: 0
+        )
+        return state
+    }()
+
     MainTabView()
-        .environment(AppState())
-        .preferredColorScheme(.dark)
+        .environment(appState)
 }

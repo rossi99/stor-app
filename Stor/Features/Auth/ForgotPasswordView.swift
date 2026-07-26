@@ -69,8 +69,3 @@ struct ForgotPasswordView: View {
 #Preview {
     ForgotPasswordView(email: "sarah@example.com")
 }
-
-#Preview("Dark") {
-    ForgotPasswordView()
-        .preferredColorScheme(.dark)
-}

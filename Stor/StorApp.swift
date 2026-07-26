@@ -19,6 +19,7 @@ struct StorApp: App {
             }
             .environment(appState)
             .animation(.easeInOut(duration: 0.3), value: appState.isAuthenticated)
+            .preferredColorScheme(.light)
         }
     }
 }

@@ -81,9 +81,3 @@ struct ProfileView: View {
     ProfileView()
         .environment(AppState())
 }
-
-#Preview("Dark") {
-    ProfileView()
-        .environment(AppState())
-        .preferredColorScheme(.dark)
-}

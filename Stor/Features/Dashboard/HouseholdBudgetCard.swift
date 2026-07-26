@@ -148,13 +148,3 @@ private struct FrameworkSplitBar: View {
     .padding()
     .background(Color.storBackground)
 }
-
-#Preview("Dark") {
-    HouseholdBudgetCard(
-        household: MockData.household,
-        incomes: MockData.incomes
-    )
-    .padding()
-    .background(Color.storBackground)
-    .preferredColorScheme(.dark)
-}

@@ -119,9 +119,3 @@ struct FloatingLabelField: View {
     SignUpView()
         .environment(AppState())
 }
-
-#Preview("Dark") {
-    SignUpView()
-        .environment(AppState())
-        .preferredColorScheme(.dark)
-}

@@ -68,9 +68,3 @@ struct WelcomeView: View {
     WelcomeView()
         .environment(AppState())
 }
-
-#Preview("Dark") {
-    WelcomeView()
-        .environment(AppState())
-        .preferredColorScheme(.dark)
-}

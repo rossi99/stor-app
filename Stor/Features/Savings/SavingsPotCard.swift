@@ -66,16 +66,3 @@ struct SavingsPotCard: View {
     }
     .background(Color.storBackground)
 }
-
-#Preview("Dark") {
-    ScrollView {
-        VStack(spacing: Spacing.md) {
-            ForEach(MockData.savingsPots) { pot in
-                SavingsPotCard(pot: pot)
-            }
-        }
-        .padding()
-    }
-    .background(Color.storBackground)
-    .preferredColorScheme(.dark)
-}

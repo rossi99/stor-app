@@ -11,8 +11,13 @@ struct SectionHeader: View {
                 .font(.storTitle3)
             Spacer()
             if let action {
-                Button(actionLabel, action: action)
-                    .font(.subheadline.weight(.medium))
+                Button(action: action) {
+                    Label(actionLabel, systemImage: "plus")
+                }
+                .font(.caption.weight(.semibold))
+                .buttonStyle(.bordered)
+                .tint(.storAccent)
+                .controlSize(.small)
             }
         }
     }

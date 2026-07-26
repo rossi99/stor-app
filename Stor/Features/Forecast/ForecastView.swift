@@ -292,9 +292,3 @@ struct ForecastView: View {
     ForecastView()
         .environment(AppState())
 }
-
-#Preview("Dark") {
-    ForecastView()
-        .environment(AppState())
-        .preferredColorScheme(.dark)
-}

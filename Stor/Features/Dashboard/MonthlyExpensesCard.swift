@@ -222,15 +222,3 @@ struct MonthlyExpensesCard: View {
     .padding()
     .background(Color.storBackground)
 }
-
-#Preview("Dark") {
-    MonthlyExpensesCard(
-        household: MockData.household,
-        incomes: MockData.incomes,
-        expenses: MockData.expenses,
-        previousMonthTotal: MockData.previousMonthExpenses
-    )
-    .padding()
-    .background(Color.storBackground)
-    .preferredColorScheme(.dark)
-}

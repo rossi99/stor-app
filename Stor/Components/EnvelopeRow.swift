@@ -1,0 +1,85 @@
+import SwiftUI
+
+/// An envelope on the Home card — name, remaining, and a thin bar.
+struct EnvelopeSummaryRow: View {
+    let envelope: Envelope
+    let accent: Color
+    @Environment(\.money) private var money
+
+    private var barColor: Color { envelope.isOver ? .storNegative : accent }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Spacing.xs) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(envelope.name)
+                    .font(.text(14))
+                    .tracking(-0.07)
+                    .foregroundStyle(Color.storInk)
+                Spacer(minLength: Spacing.sm)
+                MonoText(envelope.rightLabel(money), size: 12, color: barColor)
+            }
+
+            ProgressTrack(fraction: envelope.fraction, fill: barColor)
+        }
+        .padding(.bottom, 14)
+    }
+}
+
+/// The fuller envelope row on the Budget screen — adds the detail and pace line,
+/// and tints its background when expanded.
+struct EnvelopeDetailRow: View {
+    let envelope: Envelope
+    let accent: Color
+    let soft: Color
+    let isExpanded: Bool
+    let isFirst: Bool
+    var action: () -> Void
+
+    @Environment(\.money) private var money
+
+    private var barColor: Color { envelope.isOver ? .storNegative : accent }
+
+    /// Expanding a row swaps in the three-month average alongside the detail.
+    private var detailLine: String {
+        guard isExpanded else { return envelope.detail }
+        return "\(envelope.detail) · avg 3mo \(money(envelope.threeMonthAverage))"
+    }
+
+    var body: some View {
+        Button(action: action) {
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(envelope.name)
+                        .font(.text(14.5))
+                        .tracking(-0.116)
+                        .foregroundStyle(Color.storInk)
+                    Spacer(minLength: Spacing.sm)
+                    MonoText(envelope.rightLabel(money), size: 12.5, color: barColor)
+                }
+                .padding(.bottom, Spacing.sm)
+
+                ProgressTrack(fraction: envelope.fraction, height: TrackHeight.row, fill: barColor)
+
+                HStack(alignment: .firstTextBaseline) {
+                    MonoText(detailLine, size: 10.5, color: .storQuaternaryLabel)
+                    Spacer(minLength: Spacing.sm)
+                    MonoText(envelope.pace, size: 10.5, color: .storQuaternaryLabel)
+                }
+                .padding(.top, Spacing.xs)
+            }
+            .padding(.horizontal, 15)
+            .padding(.vertical, 14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(isExpanded ? soft : Color.storSurface)
+            .overlay(alignment: .top) {
+                if !isFirst {
+                    Rectangle()
+                        .fill(Color.storHairline)
+                        .frame(height: Stroke.hairline)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .animation(.easeInOut(duration: 0.2), value: isExpanded)
+    }
+}

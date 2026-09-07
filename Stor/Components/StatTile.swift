@@ -1,39 +1,53 @@
 import SwiftUI
 
+/// One of the paired tiles under the hero — a label, a figure, a footnote.
 struct StatTile: View {
     let label: String
     let value: String
-    var valueColor: Color = .primary
-    var footnote: String? = nil
+    let footnote: String
+    var footnoteColor: Color = .storSecondaryLabel
+    var action: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Spacing.xs) {
-            Text(label)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .textCase(.uppercase)
-                .kerning(0.4)
-            Text(value)
-                .font(.storDisplay(.title2))
-                .foregroundStyle(valueColor)
-                .minimumScaleFactor(0.7)
-            if let footnote {
+        Button(action: action) {
+            VStack(alignment: .leading, spacing: 0) {
+                MonoLabel(label)
+                    .padding(.bottom, 9)
+
+                Text(value)
+                    .font(.display(23))
+                    .tracking(-0.23)
+                    .foregroundStyle(Color.storInk)
+
                 Text(footnote)
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
+                    .font(.text(12))
+                    .foregroundStyle(footnoteColor)
+                    .padding(.top, 3)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 15)
+            .padding(.top, 15)
+            .padding(.bottom, 14)
+            .storCard()
         }
-        .padding(Spacing.md)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .storCard()
+        .buttonStyle(.plain)
     }
 }
 
-#Preview {
-    HStack {
-        StatTile(label: "Net Income", value: "£5,650", footnote: "this month")
-        StatTile(label: "Surplus", value: "£1,452", valueColor: .storSuccess, footnote: "+£919 unallocated")
+/// A compact figure tile — the Budgeted / Spent / Left triplet.
+struct CompactStat: View {
+    let label: String
+    let value: String
+    var valueColor: Color = .storInk
+    var fill: Color = .storSurface
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Spacing.xs) {
+            MonoLabel(label, size: 9.5, tracking: 0.12)
+            MonoText(value, size: 16, color: valueColor)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(13)
+        .storCard(radius: Radius.md, fill: fill)
     }
-    .padding()
-    .background(Color.storBackground)
 }

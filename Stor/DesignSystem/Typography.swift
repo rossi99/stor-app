@@ -3,73 +3,74 @@ import UIKit
 
 // MARK: - Typography
 //
-// Headings and hero/display numbers use **New York** (Apple's system serif,
-// `design: .serif`) — warm, slightly traditional, and drawn to pair with SF.
-// Body, UI, small text and the tab bar use **SF Pro** (the system default).
-// Numbers inside tables/rows use **SF Pro with tabular (monospaced) digits** so
-// that columns line up; the large display number keeps New York because its
-// alignment doesn't matter.
+// Two families carry the whole interface.
+//
+// **SF Pro Display** at weight 650 for every heading and display figure. 650
+// sits between semibold (600) and bold (700); `UIFont.Weight` takes a raw
+// CGFloat, so the bridge below hits it exactly rather than rounding to one of
+// SwiftUI's named weights. iOS switches to the Display optical size above 20pt
+// on its own.
+//
+// **SF Mono**, uppercased and widely tracked, for micro-labels, money and
+// metadata. Tabular figures come free with a monospaced design, so columns of
+// currency align without further work.
 
 extension Font {
 
-    // MARK: Headings — New York (serif)
-
-    static let storLargeTitle = Font.system(.largeTitle, design: .serif).weight(.bold)
-    static let storTitle      = Font.system(.title,      design: .serif).weight(.semibold)
-    static let storTitle2     = Font.system(.title2,     design: .serif).weight(.semibold)
-    static let storTitle3     = Font.system(.title3,     design: .serif).weight(.semibold)
-
-    /// A hero number at a fixed point size, in New York.
-    /// Use for large display figures where column alignment doesn't matter.
-    static func storHero(size: CGFloat, weight: Font.Weight = .bold) -> Font {
-        .system(size: size, weight: weight, design: .serif)
+    /// SF Pro Display at a fixed size and true numeric weight.
+    static func display(_ size: CGFloat, weight: CGFloat = 650) -> Font {
+        Font(UIFont.systemFont(ofSize: size, weight: UIFont.Weight(uiWeight(weight))))
     }
 
-    /// A display number/heading using a Dynamic Type text style, in New York.
-    static func storDisplay(_ style: Font.TextStyle = .title2, weight: Font.Weight = .bold) -> Font {
-        .system(style, design: .serif).weight(weight)
+    /// SF Mono at a fixed size — micro-labels, money, metadata.
+    static func mono(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
+        .system(size: size, weight: weight, design: .monospaced)
     }
 
-    // MARK: Tabular numbers — SF Pro, monospaced digits
+    /// SF Pro Text — body copy, row titles, anything conversational.
+    static func text(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
+        .system(size: size, weight: weight, design: .default)
+    }
 
-    /// SF Pro with tabular (monospaced) digits, for numbers in lists/rows that
-    /// should align vertically.
-    static func storTabular(_ style: Font.TextStyle = .subheadline, weight: Font.Weight = .regular) -> Font {
-        .system(style, design: .default).weight(weight).monospacedDigit()
+    /// Maps a CSS numeric weight (100–900) onto `UIFont.Weight`'s -1...1 scale.
+    private static func uiWeight(_ css: CGFloat) -> CGFloat {
+        let stops: [(CGFloat, CGFloat)] = [
+            (100, -0.80), (200, -0.60), (300, -0.23), (400, 0.00),
+            (500,  0.23), (600,  0.30), (700,  0.40), (800, 0.56), (900, 0.62),
+        ]
+        if css <= stops[0].0 { return stops[0].1 }
+        if css >= stops[stops.count - 1].0 { return stops[stops.count - 1].1 }
+        for i in 1..<stops.count where css <= stops[i].0 {
+            let (lowCSS, lowUI) = stops[i - 1], (highCSS, highUI) = stops[i]
+            let t = (css - lowCSS) / (highCSS - lowCSS)
+            return lowUI + t * (highUI - lowUI)
+        }
+        return 0
+    }
+}
+
+// MARK: - Tracking
+
+extension View {
+    /// Letter-spacing expressed in `em`, the unit the design is specified in.
+    func tracking(em: CGFloat, size: CGFloat) -> some View {
+        tracking(em * size)
     }
 }
 
 // MARK: - Navigation bar appearance
 
 enum Typography {
-    /// New York at the given size/weight, scaled for Dynamic Type.
-    private static func serif(size: CGFloat, weight: UIFont.Weight, style: UIFont.TextStyle) -> UIFont {
-        let base = UIFont.systemFont(ofSize: size, weight: weight)
-        let serif = base.fontDescriptor.withDesign(.serif).map { UIFont(descriptor: $0, size: size) } ?? base
-        return UIFontMetrics(forTextStyle: style).scaledFont(for: serif)
-    }
-
-    /// Renders navigation-bar titles in New York app-wide. Body, tab bar and
-    /// everything else stay SF Pro. Backgrounds are left at their system
-    /// defaults (transparent at rest over the cream background, blurred when
-    /// content scrolls underneath).
+    /// Every screen draws its own header, so the system navigation bar only ever
+    /// needs to be invisible and out of the way.
     static func configureNavigationBar() {
-        let large  = serif(size: 34, weight: .bold,     style: .largeTitle)
-        let inline = serif(size: 17, weight: .semibold, style: .headline)
-
-        let scrolled = UINavigationBarAppearance()
-        scrolled.configureWithDefaultBackground()
-        scrolled.largeTitleTextAttributes = [.font: large]
-        scrolled.titleTextAttributes      = [.font: inline]
-
-        let atRest = UINavigationBarAppearance()
-        atRest.configureWithTransparentBackground()
-        atRest.largeTitleTextAttributes = [.font: large]
-        atRest.titleTextAttributes      = [.font: inline]
+        let transparent = UINavigationBarAppearance()
+        transparent.configureWithTransparentBackground()
+        transparent.shadowColor = nil
 
         let bar = UINavigationBar.appearance()
-        bar.standardAppearance   = scrolled
-        bar.compactAppearance    = scrolled
-        bar.scrollEdgeAppearance = atRest
+        bar.standardAppearance   = transparent
+        bar.compactAppearance    = transparent
+        bar.scrollEdgeAppearance = transparent
     }
 }

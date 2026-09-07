@@ -11,13 +11,17 @@ struct StorApp: App {
     var body: some Scene {
         WindowGroup {
             Group {
-                if appState.isAuthenticated && appState.hasHousehold {
+                if !appState.isAuthenticated {
+                    AuthView()
+                } else if appState.hasCompletedSetup {
                     MainTabView()
                 } else {
-                    WelcomeView()
+                    OnboardingView()
                 }
             }
             .environment(appState)
+            .environment(\.money, appState.money)
+            .animation(.easeInOut(duration: 0.3), value: appState.hasCompletedSetup)
             .animation(.easeInOut(duration: 0.3), value: appState.isAuthenticated)
             .preferredColorScheme(.light)
         }

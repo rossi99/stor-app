@@ -1,56 +1,38 @@
 import SwiftUI
 
 enum Spacing {
-    static let xs: CGFloat  =  4
-    static let sm: CGFloat  =  8
-    static let md: CGFloat  = 16
-    static let lg: CGFloat  = 24
-    static let xl: CGFloat  = 32
-    static let xxl: CGFloat = 48
+    static let xxs: CGFloat =  4
+    static let xs:  CGFloat =  6
+    static let sm:  CGFloat =  8
+    static let md:  CGFloat = 12
+    static let lg:  CGFloat = 16
+    static let xl:  CGFloat = 20
+    static let xxl: CGFloat = 26
+
+    /// Horizontal inset every screen's content sits within.
+    static let screen: CGFloat = 20
 }
 
 enum Radius {
-    static let sm: CGFloat = 10
-    static let md: CGFloat = 16
-    static let lg: CGFloat = 20
+    static let xs:   CGFloat =  9
+    static let sm:   CGFloat = 11
+    static let md:   CGFloat = 14
+    static let lg:   CGFloat = 16
+    static let xl:   CGFloat = 18
+    static let xxl:  CGFloat = 20
+    static let sheet: CGFloat = 26
+    static let pill:  CGFloat = 999
 }
 
-// Brand/surface/text/progress colors are asset-catalog color sets in
-// Assets.xcassets. The app is light-only (see `.preferredColorScheme(.light)`
-// in StorApp.swift), so each set has a single universal appearance. Xcode
-// auto-generates `Color.storX` / `ShapeStyle.storX` accessors for each color
-// set (GeneratedAssetSymbols.swift), so those names must NOT be redeclared
-// here — only the two money colors that have no asset entry.
-extension Color {
-    static let storPositive = Color(red: 0.180, green: 0.490, blue: 0.275)  // #2E7D46
-    static let storSuccess  = Color(red: 0.180, green: 0.490, blue: 0.275)  // #2E7D46
-    static let storNegative = Color(red: 0.706, green: 0.278, blue: 0.180)  // #B4472E
+enum Stroke {
+    static let hairline: CGFloat = 1
 }
 
-extension View {
-    /// Adds a gradient fade from `storBackground` over the status-bar safe area,
-    /// preventing scroll content from bleeding visually behind the clock/battery.
-    func statusBarGradient(_ active: Bool = true) -> some View {
-        overlay(alignment: .top) {
-            if active {
-                LinearGradient(
-                    colors: [Color.storBackground, Color.storBackground.opacity(0)],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .frame(height: 80)
-                .ignoresSafeArea(edges: .top)
-                .allowsHitTesting(false)
-            }
-        }
-    }
-}
-
-// Allows `.storX` in ShapeStyle contexts (foregroundStyle, fill, tint, etc.)
-// for the money colors only — every asset-backed color already gets this via
-// Xcode's generated `ShapeStyle where Self == Color` extension.
-extension ShapeStyle where Self == Color {
-    static var storPositive: Color { Color.storPositive }
-    static var storSuccess:  Color { Color.storSuccess }
-    static var storNegative: Color { Color.storNegative }
+/// Bar heights used by progress tracks, sized by how much weight the row carries.
+enum TrackHeight {
+    static let thin:   CGFloat = 4
+    static let row:    CGFloat = 5
+    static let hero:   CGFloat = 6
+    static let recap:  CGFloat = 7
+    static let goal:   CGFloat = 8
 }

@@ -1,52 +1,72 @@
-import Foundation
+import SwiftUI
 
-extension Double {
-    var gbp: String {
-        let f = NumberFormatter()
-        f.numberStyle = .currency
-        f.currencyCode = "GBP"
-        f.currencySymbol = "£"
-        f.maximumFractionDigits = 2
-        f.minimumFractionDigits = 2
-        return f.string(from: NSNumber(value: self)) ?? "£0.00"
-    }
+enum Currency: String, CaseIterable, Sendable {
+    case gbp = "GBP", eur = "EUR", usd = "USD", jpy = "JPY"
 
-    var gbpRounded: String {
-        let f = NumberFormatter()
-        f.numberStyle = .currency
-        f.currencyCode = "GBP"
-        f.currencySymbol = "£"
-        f.maximumFractionDigits = 0
-        f.minimumFractionDigits = 0
-        return f.string(from: NSNumber(value: self)) ?? "£0"
-    }
-
-    var percent: String {
-        String(format: "%.1f%%", self * 100)
-    }
-
-    var percentInt: String {
-        String(format: "%.0f%%", self * 100)
+    var symbol: String {
+        switch self {
+        case .gbp: "£"
+        case .eur: "€"
+        case .usd: "$"
+        case .jpy: "¥"
+        }
     }
 }
 
-extension Date {
-    var relativeShort: String {
-        let f = RelativeDateTimeFormatter()
-        f.unitsStyle = .abbreviated
-        return f.localizedString(for: self, relativeTo: Date())
+/// Formats money the way the design specifies: a true minus sign rather than a
+/// hyphen, en-GB grouping, and whole numbers rendered without trailing zeroes.
+/// Privacy mode replaces every figure with bullets at the point of formatting,
+/// so no view can accidentally leak an amount it never asked to show.
+struct MoneyFormatter: Sendable {
+    var currency: Currency = .gbp
+    var privacyMode: Bool = false
+
+    private static let grouping: NumberFormatter = {
+        let f = NumberFormatter()
+        f.numberStyle = .decimal
+        f.locale = Locale(identifier: "en_GB")
+        f.usesGroupingSeparator = true
+        return f
+    }()
+
+    /// `decimals: nil` shows whole numbers bare and everything else to 2dp.
+    func callAsFunction(_ value: Double, decimals: Int? = nil) -> String {
+        guard !privacyMode else { return "••••" }
+
+        let magnitude = abs(value)
+        let places = decimals ?? (magnitude.rounded() == magnitude ? 0 : 2)
+
+        let f = Self.grouping
+        f.minimumFractionDigits = places
+        f.maximumFractionDigits = places
+        let digits = f.string(from: NSNumber(value: magnitude)) ?? "0"
+
+        return (value < 0 ? "−" : "") + currency.symbol + digits
     }
 
-    var monthYear: String {
-        let f = DateFormatter()
-        f.dateFormat = "MMM yyyy"
-        return f.string(from: self)
+    /// Compact thousands, for stat tiles where the exact pound doesn't matter.
+    func thousands(_ value: Double) -> String {
+        guard !privacyMode else { return "••••" }
+        return currency.symbol + String(format: "%.1fk", value / 1000)
     }
 
-    var dayMonthYear: String {
-        let f = DateFormatter()
-        f.dateStyle = .medium
-        f.timeStyle = .none
-        return f.string(from: self)
+    /// A signed figure, where the direction of change is the point.
+    func signed(_ value: Double, decimals: Int? = nil) -> String {
+        (value > 0 ? "+" : "") + callAsFunction(value, decimals: decimals)
     }
+}
+
+extension EnvironmentValues {
+    @Entry var money = MoneyFormatter()
+}
+
+// MARK: - Percentages
+
+extension Double {
+    /// A whole-number percentage from a 0...1 fraction.
+    var percentInt: String { String(format: "%.0f%%", self * 100) }
+}
+
+extension Int {
+    var percentLabel: String { "\(self)%" }
 }

@@ -1,245 +1,119 @@
 import Foundation
 
+/// Fixtures for the Whitfield–Okonkwo household: Ana and Sam, no kids, GBP.
+/// Two salaries paid on the 10th; the joint pot is funded by standing order
+/// rather than by splitting each purchase after the fact.
 enum MockData {
 
-    // MARK: Members
-    static let sarah = Member(
-        id: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!,
-        name: "Ross Curlaughlin",
-        email: "rc07jnr@gmail.com",
-        age: 27,
-        gender: "Male",
-        isCreator: true
-    )
+    // MARK: - People
 
-    static let james = Member(
-        id: UUID(uuidString: "00000000-0000-0000-0000-000000000002")!,
-        name: "Niámh Curlaughlin",
-        email: "nmclaughlin1504@gmail.com",
-        age: 27,
-        gender: "Female",
-        isCreator: false
-    )
-
-    // MARK: Household
-    static let household = Household(
-        id: UUID(uuidString: "00000000-0000-0000-0000-000000000010")!,
-        name: "The Murphys",
-        members: [sarah, james],
-        memberSince: iso("2023-03-15"),
-        framework: .fiftyThirtyTwenty,
-        requiresApprovals: true,
-        surplusSplitMethod: .proportional,
-        inviteCode: "MURP-4821"
-    )
-
-    // MARK: Incomes
-    static let incomes: [Income] = [
-        Income(
-            id: UUID(uuidString: "00000000-0000-0000-0000-000000000101")!,
-            memberID: sarah.id,
-            memberName: sarah.name,
-            grossMonthly: 4_500,
-            netMonthly: 3_200
-        ),
-        Income(
-            id: UUID(uuidString: "00000000-0000-0000-0000-000000000102")!,
-            memberID: james.id,
-            memberName: james.name,
-            grossMonthly: 3_600,
-            netMonthly: 2_450
-        ),
+    static let members: [HouseholdMember] = [
+        HouseholdMember(ledger: .ana, name: "Ana Whitfield", initials: "AW",
+                        role: "Owner · sees joint + own", netPay: 3341, contribution: 1950),
+        HouseholdMember(ledger: .sam, name: "Sam Okonkwo", initials: "SO",
+                        role: "Member · sees joint + own", netPay: 2605, contribution: 1450),
     ]
 
-    static var householdNetMonthly: Double { incomes.reduce(0) { $0 + $1.netMonthly } }
+    static let householdName = "Whitfield–Okonkwo"
+    static let today = "Mon 14 Sep"
+    static let todayDay = 14
+    static let daysLeftInMonth = 17
 
-    // MARK: Personal details & tax (Sarah – logged-in user)
-    static let sarahPersonalDetails = PersonalDetails(
-        name: sarah.name,
-        email: sarah.email,
-        age: sarah.age,
-        gender: sarah.gender,
-        currency: "GBP"
-    )
+    /// Average monthly shared outgoings — the bar the joint pot has to clear.
+    static let averageSharedOutgoings: Double = 3228
 
-    static let sarahTaxInfo = TaxInfo(
-        grossMonthly: 4_500,
-        taxCode: "1257L",
-        taxSystem: "PAYE",
-        taxYear: "2025/26",
-        maritalStatus: "Married",
-        pensionContributionPercent: 5,
-        hasStudentLoan: false,
-        studentLoanPlan: nil
-    )
+    // MARK: - Setup
 
-    static let jamesTaxInfo = TaxInfo(
-        grossMonthly: 3_600,
-        taxCode: "1257L",
-        taxSystem: "PAYE",
-        taxYear: "2025/26",
-        maritalStatus: "Married",
-        pensionContributionPercent: 5,
-        hasStudentLoan: true,
-        studentLoanPlan: "Plan 2"
-    )
-
-    // MARK: Expenses
-    // Monthly totals: Needs ≈ £3,475 (123% of the £2,825 budget — over)  Wants ≈ £945  Sinking ≈ £600
-    static let expenses: [Expense] = [
-        // Bills – Needs
-        expense("Rent",          2_228,   .monthly, .bills,       by: sarah, approved: true),
-        expense("Electricity",      85,   .monthly, .bills,       by: sarah, approved: true),
-        expense("Gas",              65,   .monthly, .bills,       by: sarah, approved: true),
-        expense("Water",            35,   .monthly, .bills,       by: james, approved: true),
-        expense("Council Tax",     162,   .monthly, .bills,       by: james, approved: true),
-        expense("Home Insurance",  336,   .annual,  .bills,       by: sarah, approved: true),
-        expense("Car Insurance",   648,   .annual,  .bills,       by: james, approved: true),
-        expense("Broadband",        38,   .monthly, .bills,       by: sarah, approved: true),
-        // Groceries – Needs
-        expense("Weekly Shop",     120,   .weekly,  .groceries,   by: sarah, approved: true),
-        // Transport – Needs
-        expense("Train Pass",      195,   .monthly, .transport,   by: sarah, approved: true),
-        expense("Petrol",           65,   .monthly, .transport,   by: james, approved: true),
-        // Subscriptions – Wants
-        expense("Netflix",          18,   .monthly, .subscriptions, by: sarah, approved: true),
-        expense("Spotify",          11,   .monthly, .subscriptions, by: sarah, approved: true),
-        expense("iCloud+",           3,   .monthly, .subscriptions, by: sarah, approved: true),
-        expense("Amazon Prime",      95,   .annual,  .subscriptions, by: james, approved: true),
-        expense("Sarah's Gym",      45,   .monthly, .subscriptions, by: sarah, approved: true),
-        expense("James's Gym",      35,   .monthly, .subscriptions, by: james, approved: true),
-        // Eating Out – Wants
-        expense("Dining Out",      280,   .monthly, .eatingOut,   by: james, approved: true),
-        expense("Takeaways",        60,   .monthly, .eatingOut,   by: james, approved: true),
-        // Entertainment – Wants
-        expense("Nights Out",      150,   .monthly, .entertainment, by: sarah, approved: true),
-        // Clothing – Wants
-        expense("Personal Shopping", 120, .monthly, .clothing,    by: sarah, approved: true),
-        expense("Haircuts",          40,  .monthly, .clothing,    by: james, approved: true),
-        // Sinking Funds – Savings
-        expense("Emergency Fund",  200,   .monthly, .sinkingFunds, by: sarah, approved: true),
-        expense("Holiday Fund",    300,   .monthly, .sinkingFunds, by: sarah, approved: true),
-        expense("Home Renovation", 200,   .monthly, .sinkingFunds, by: james, approved: true),
-        expense("Car Fund",        100,   .monthly, .sinkingFunds, by: james, approved: true),
-        // Pending approval (James wants to add a cinema subscription)
-        expense("Cinema Club",      15,   .monthly, .subscriptions, by: james, approved: false),
+    static let linkableAccounts: [BankAccount] = [
+        BankAccount(id: "monzo",    name: "Monzo Current",    owner: "Ana",   ledger: .ana,   initial: "M"),
+        BankAccount(id: "vanguard", name: "Vanguard ISA",     owner: "Ana",   ledger: .ana,   initial: "V"),
+        BankAccount(id: "starling", name: "Starling Joint",   owner: "Joint", ledger: .joint, initial: "S"),
+        BankAccount(id: "chase",    name: "Chase Saver",      owner: "Joint", ledger: .joint, initial: "C"),
+        BankAccount(id: "lloyds",   name: "Lloyds Current",   owner: "Sam",   ledger: .sam,   initial: "L"),
+        BankAccount(id: "halifax",  name: "Halifax Mortgage", owner: "Joint", ledger: .joint, initial: "H"),
     ]
 
-    /// Previous month's total approved expenses, used to show a month-on-month
-    /// comparison on the dashboard. (Current approved total is roughly £4,270.)
-    static let previousMonthExpenses: Double = 4_410
+    static let defaultLinkedAccounts: Set<String> = ["monzo", "starling", "lloyds"]
 
-    // MARK: Savings pots
-    static let savingsPots: [SavingsPot] = [
-        SavingsPot(
-            id: UUID(uuidString: "00000000-0000-0000-0000-000000000301")!,
-            name: "Emergency Fund",
-            current: 2_400,
-            target: 3_600,
-            monthlyContribution: 200,
-            emoji: "🛡️"
-        ),
-        SavingsPot(
-            id: UUID(uuidString: "00000000-0000-0000-0000-000000000302")!,
-            name: "Ibiza 2026",
-            current: 1_850,
-            target: 3_500,
-            monthlyContribution: 300,
-            emoji: "✈️"
-        ),
-        SavingsPot(
-            id: UUID(uuidString: "00000000-0000-0000-0000-000000000303")!,
-            name: "Home Renovation",
-            current: 4_200,
-            target: 10_000,
-            monthlyContribution: 200,
-            emoji: "🏡"
-        ),
-        SavingsPot(
-            id: UUID(uuidString: "00000000-0000-0000-0000-000000000304")!,
-            name: "Car Fund",
-            current: 650,
-            target: 2_000,
-            monthlyContribution: 100,
-            emoji: "🚗"
-        ),
-    ]
+    /// Identities that already have an account. Ana's Google address is seeded
+    /// so the provider flow demonstrates both halves of the upsert.
+    static let knownAccounts: Set<String> = ["ana.whitfield@gmail.com"]
 
-    // MARK: Pensions
-    static let pensions: [Pension] = [
-        Pension(
-            id: UUID(uuidString: "00000000-0000-0000-0000-000000000401")!,
-            memberID: sarah.id,
-            memberName: sarah.name,
-            currentValue: 28_500,
-            target: 200_000,
-            lastUpdated: iso("2026-06-01")
-        ),
-        Pension(
-            id: UUID(uuidString: "00000000-0000-0000-0000-000000000402")!,
-            memberID: james.id,
-            memberName: james.name,
-            currentValue: 41_200,
-            target: 250_000,
-            lastUpdated: iso("2026-05-28")
-        ),
-    ]
+    // MARK: - Envelopes
 
-    // MARK: ISAs
-    static let isas: [ISA] = [
-        ISA(
-            id: UUID(uuidString: "00000000-0000-0000-0000-000000000501")!,
-            memberID: sarah.id,
-            memberName: sarah.name,
-            type: "Stocks & Shares ISA",
-            balance: 8_450,
-            contributionsThisYear: 4_000,
-            annualAllowance: 20_000
-        ),
-        ISA(
-            id: UUID(uuidString: "00000000-0000-0000-0000-000000000502")!,
-            memberID: james.id,
-            memberName: james.name,
-            type: "Stocks & Shares ISA",
-            balance: 12_200,
-            contributionsThisYear: 6_500,
-            annualAllowance: 20_000
-        ),
-    ]
-
-    // MARK: Financial position
-    // Income £5,650 · Expenses £3,598 · Savings £600 · Surplus £1,452
-    static let financialPosition = FinancialPosition(
-        monthlyIncome:   5_650,
-        monthlyExpenses: 3_598,
-        monthlySavings:    600
-    )
-
-    // MARK: Helpers
-    private static func iso(_ string: String) -> Date {
-        let f = DateFormatter()
-        f.dateFormat = "yyyy-MM-dd"
-        return f.date(from: string) ?? Date()
+    static func envelopes(for ledger: Ledger) -> [Envelope] {
+        switch ledger {
+        case .joint:
+            [
+                Envelope(name: "Rent & mortgage", spent: 1420, budget: 1420, detail: "Paid 1 Sep",        pace: "on plan"),
+                Envelope(name: "Groceries",       spent:  412, budget:  520, detail: "11 shops",          pace: "2% ahead"),
+                Envelope(name: "Energy & water",  spent:  188, budget:  210, detail: "2 direct debits",   pace: "on plan"),
+                Envelope(name: "Transport",       spent:   96, budget:  160, detail: "TfL + fuel",        pace: "18% under"),
+                Envelope(name: "Eating out",      spent:  143, budget:  120, detail: "6 outings",         pace: "over by 19%"),
+                Envelope(name: "Home & repairs",  spent:   58, budget:  150, detail: "Screwfix, filters", pace: "61% left"),
+                Envelope(name: "Subscriptions",   spent:   47, budget:   48, detail: "7 active",          pace: "on plan"),
+                Envelope(name: "Savings transfer", spent: 600, budget:  600, detail: "Auto, 30 Sep",      pace: "on plan"),
+            ]
+        case .ana:
+            [
+                Envelope(name: "Clothes",         spent: 118, budget: 150, detail: "3 orders",       pace: "21% left"),
+                Envelope(name: "Coffee & lunch",  spent:  86, budget:  90, detail: "19 taps",        pace: "tight"),
+                Envelope(name: "Hobbies",         spent:  64, budget: 200, detail: "Pottery studio", pace: "68% left"),
+                Envelope(name: "Gifts",           spent:  35, budget:  60, detail: "Sam's mum",      pace: "42% left"),
+                Envelope(name: "Unallocated",     spent:  80, budget: 200, detail: "No envelope",    pace: "—"),
+            ]
+        case .sam:
+            [
+                Envelope(name: "Cycling",         spent: 214, budget: 180, detail: "New wheelset", pace: "over by 19%"),
+                Envelope(name: "Coffee & lunch",  spent: 102, budget:  90, detail: "24 taps",      pace: "over by 13%"),
+                Envelope(name: "Games",           spent:  76, budget:  80, detail: "2 titles",     pace: "tight"),
+                Envelope(name: "Barber",          spent:  30, budget:  40, detail: "1 visit",      pace: "25% left"),
+                Envelope(name: "Unallocated",     spent:  90, budget: 310, detail: "No envelope",  pace: "—"),
+            ]
+        }
     }
 
-    private static func expense(
-        _ name: String,
-        _ total: Double,
-        _ freq: ExpenseFrequency,
-        _ cat: ExpenseCategory,
-        by member: Member,
-        approved: Bool
-    ) -> Expense {
-        Expense(
-            id: UUID(),
-            name: name,
-            total: total,
-            frequency: freq,
-            category: cat,
-            addedBy: member.id,
-            approvalStatus: approved
-                ? .approved
-                : .pendingApproval(agreedBy: [])
-        )
-    }
+    // MARK: - Ledger
+
+    static let transactions: [Transaction] = [
+        Transaction(group: "Today · Mon 14 Sep", title: "Sainsbury's", category: "Groceries",
+                    amount: -46.20, actor: .ana, ledger: .joint, tag: "Joint", monogram: "SB"),
+        Transaction(group: "Today · Mon 14 Sep", title: "TfL travel", category: "Transport",
+                    amount: -6.80, actor: .sam, ledger: .joint, tag: "Joint", monogram: "TF"),
+        Transaction(group: "Sun 13 Sep", title: "The Bell", category: "Eating out",
+                    amount: -38.50, actor: .sam, ledger: .joint, tag: "50/50", monogram: "BE"),
+        Transaction(group: "Sun 13 Sep", title: "Boots", category: "Health",
+                    amount: -12.40, actor: .ana, ledger: .ana, tag: "Ana", monogram: "BO"),
+        Transaction(group: "Sat 12 Sep", title: "Ocado", category: "Groceries",
+                    amount: -74.15, actor: .ana, ledger: .joint, tag: "Joint", monogram: "OC"),
+        Transaction(group: "Sat 12 Sep", title: "Screwfix", category: "Home & repairs",
+                    amount: -21.90, actor: .sam, ledger: .joint, tag: "60/40", monogram: "SX"),
+        Transaction(group: "Sat 12 Sep", title: "Ozone Coffee", category: "Coffee & lunch",
+                    amount: -3.60, actor: .ana, ledger: .ana, tag: "Ana", monogram: "OZ"),
+        Transaction(group: "Fri 11 Sep", title: "Octopus Energy", category: "Energy & water",
+                    amount: -142, actor: nil, ledger: .joint, tag: "DD", monogram: "OE"),
+        Transaction(group: "Fri 11 Sep", title: "Deliveroo", category: "Eating out",
+                    amount: -29.40, actor: .sam, ledger: .joint, tag: "50/50", monogram: "DL"),
+        Transaction(group: "Thu 10 Sep", title: "Transfer to joint pot", category: "Contribution",
+                    amount: -1950, actor: .ana, ledger: .ana, tag: "Ana", monogram: "→"),
+        Transaction(group: "Thu 10 Sep", title: "Salary · Kite Studio", category: "Income",
+                    amount: 3341.28, actor: .ana, ledger: .ana, tag: "Ana", monogram: "£"),
+    ]
+
+    static let spendCategories = [
+        "Groceries", "Eating out", "Transport", "Home & repairs", "Health", "Other",
+    ]
+
+    // MARK: - Goals
+
+    static let goals: [Goal] = [
+        Goal(id: "kitchen", name: "Kitchen renovation", saved: 7400, target: 18000, monthly: 450,
+             note: "Funded from the joint pot after the savings transfer."),
+        Goal(id: "japan", name: "Japan, spring", saved: 2340, target: 6000, monthly: 150,
+             note: "Split 50/50 from personal allowances, not the pot."),
+    ]
+
+    static let emergencyFundMonths = 4.2
+    static let emergencyFundNote =
+        "Target is 6 months. At £600/mo you reach it in November 2027."
 }

@@ -18,6 +18,13 @@ enum MockData {
     static let today = "Mon 14 Sep"
     static let todayDay = 14
     static let daysLeftInMonth = 17
+    static let referenceDate = Calendar(identifier: .gregorian)
+        .date(from: DateComponents(year: 2026, month: 9, day: todayDay))!
+    static var monthStartOffset: Int {
+        let calendar = Calendar(identifier: .gregorian)
+        let start = calendar.date(from: calendar.dateComponents([.year, .month], from: referenceDate))!
+        return (calendar.component(.weekday, from: start) + 5) % 7
+    }
 
     /// Average monthly shared outgoings — the bar the joint pot has to clear.
     static let averageSharedOutgoings: Double = 3228

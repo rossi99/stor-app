@@ -3,7 +3,9 @@ import SwiftUI
 /// The −/+ pair used to nudge a contribution or a goal. The plus is filled when
 /// it is the encouraged direction, outlined when both directions are equal.
 struct CircleStepper: View {
-    var size: CGFloat = 36
+    var size: CGFloat = 44
+    var context: String = "contribution"
+    var canDecrement = true
     var emphasisePlus: Bool = true
     var onDecrement: () -> Void
     var onIncrement: () -> Void
@@ -11,6 +13,8 @@ struct CircleStepper: View {
     var body: some View {
         HStack(spacing: Spacing.md) {
             button("minus", filled: false, action: onDecrement)
+                .disabled(!canDecrement)
+                .opacity(canDecrement ? 1 : 0.4)
             button("plus", filled: emphasisePlus, action: onIncrement)
         }
     }
@@ -30,6 +34,7 @@ struct CircleStepper: View {
                 }
         }
         .buttonStyle(.plain)
+        .accessibilityLabel("\(symbol == "minus" ? "Decrease" : "Increase") \(context)")
     }
 }
 
@@ -44,11 +49,12 @@ struct PrimaryButton: View {
     var body: some View {
         Button(action: action) {
             Text(title)
-                .font(.text(15.5, weight: .semibold))
+                .storText(15.5, weight: .semibold)
                 .tracking(-0.155)
                 .foregroundStyle(isEnabled ? titleColor : Color.storQuaternaryLabel)
                 .frame(maxWidth: .infinity)
-                .frame(height: 52)
+                .padding(.vertical, 14)
+                .frame(minHeight: 52)
                 .background(isEnabled ? fill : Color.storInk.opacity(0.08))
                 .clipShape(.capsule)
         }

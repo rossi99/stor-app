@@ -2,18 +2,26 @@ import Foundation
 
 /// The in-progress spend being entered on the add sheet.
 struct SpendDraft {
-    /// Raw keypad entry, kept as a string so a trailing "." survives typing.
+    /// Raw decimal input, kept as a string so a trailing separator survives typing.
     var entry: String = ""
+    var paidBy: Ledger = .ana
+    var merchant = ""
     var category: String = MockData.spendCategories[0]
     var ledger: Ledger = .joint
     /// Ana's share as a percentage, when the spend settles against the joint pot.
     var splitPercent: Int = 50
 
-    static let splitPresets = [50, 60, 70]
-    static let maxEntryLength = 8
+    static let splitPresets = [0, 50, 100]
 
-    var amount: Double { Double(entry) ?? 0 }
-    var isValid: Bool { amount > 0 }
+    /// Accept either decimal separator, up to six whole digits and two pennies.
+    /// Invalid pasted input stays visible in the field, but cannot be committed.
+    var amount: Double { MoneyInput.amount(from: entry) ?? 0 }
+    var hasContent: Bool {
+        !entry.isEmpty || !merchant.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+    var isValid: Bool { amount > 0 && (0...100).contains(splitPercent) }
+    var anaAmount: Double { (amount * Double(splitPercent)).rounded() / 100 }
+    var samAmount: Double { (amount * 100 - anaAmount * 100).rounded() / 100 }
 
     /// Shows a placeholder zero until the first key lands.
     func display(_ money: MoneyFormatter) -> String {
@@ -23,11 +31,11 @@ struct SpendDraft {
     var showsSplit: Bool { ledger == .joint }
 
     func anaShare(_ money: MoneyFormatter) -> String {
-        money((amount * Double(splitPercent) / 100 * 100).rounded() / 100, decimals: 2)
+        money(anaAmount, decimals: 2)
     }
 
     func samShare(_ money: MoneyFormatter) -> String {
-        money((amount * Double(100 - splitPercent) / 100 * 100).rounded() / 100, decimals: 2)
+        money(samAmount, decimals: 2)
     }
 
     /// "60/40" for a joint spend, otherwise the owner's name.
@@ -42,10 +50,11 @@ struct SpendDraft {
     func asTransaction() -> Transaction {
         Transaction(
             group: "Today · \(MockData.today)",
-            title: "Card payment · \(category)",
+            title: merchant.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                ? "Card payment · \(category)" : merchant.trimmingCharacters(in: .whitespacesAndNewlines),
             category: category,
             amount: -amount,
-            actor: ledger == .joint ? .ana : ledger,
+            actor: ledger == .joint ? paidBy : ledger,
             ledger: ledger,
             tag: tag,
             monogram: "✦",
@@ -77,6 +86,23 @@ struct SpendDraft {
 
     /// Applies one keypad press to `entry`.
     mutating func apply(_ key: Key) {
-        // TODO(human): decide the input rules and mutate `entry` accordingly.
+        switch key {
+        case .delete:
+            if !entry.isEmpty { entry.removeLast() }
+        case .decimalPoint:
+            guard !entry.contains("."), !entry.contains(",") else { return }
+            entry = entry.isEmpty ? "0." : entry + "."
+        case .digit(let digit):
+            guard digit.count == 1, "0123456789".contains(digit) else { return }
+            let candidate = entry == "0" ? digit : entry + digit
+            var copy = self
+            copy.entry = candidate
+            guard copy.amount > 0 || Double(candidate) == 0 else { return }
+            let parts = candidate.replacingOccurrences(of: ",", with: ".")
+                .split(separator: ".", omittingEmptySubsequences: false)
+            guard (parts.first?.count ?? 0) <= 6,
+                  parts.count < 2 || parts[1].count <= 2 else { return }
+            entry = candidate
+        }
     }
 }

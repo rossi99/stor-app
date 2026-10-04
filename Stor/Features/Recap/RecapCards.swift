@@ -32,7 +32,7 @@ struct RecapCategoriesCard: View {
             VStack(alignment: .leading, spacing: 0) {
                 HStack(alignment: .firstTextBaseline) {
                     Text(category.name)
-                        .font(.text(13.5))
+                        .storText(13.5)
                         .tracking(-0.0675)
                         .foregroundStyle(isOpen ? Color.storAccent : Color.storInk)
 
@@ -53,7 +53,7 @@ struct RecapCategoriesCard: View {
 
                 if isOpen {
                     Text(detail(category))
-                        .font(.text(12))
+                        .storText(12)
                         .lineSpacing(2)
                         .foregroundStyle(Color.storSecondaryLabel)
                         .multilineTextAlignment(.leading)
@@ -108,7 +108,7 @@ struct PayslipCheckCard: View {
             .padding(.bottom, Spacing.xs)
 
             Text("Expected net = gross − income tax − National Insurance, against what actually landed.")
-                .font(.text(12.5))
+                .storText(12.5)
                 .lineSpacing(2)
                 .foregroundStyle(Color.storSecondaryLabel)
                 .padding(.bottom, 14)
@@ -131,7 +131,7 @@ struct PayslipCheckCard: View {
                 HStack(spacing: Spacing.sm) {
                     Circle().fill(payslip.ledger.accent).frame(width: 8, height: 8)
                     Text(payslip.name)
-                        .font(.text(14.5, weight: .semibold))
+                        .storText(14.5, weight: .semibold)
                         .tracking(-0.116)
                         .foregroundStyle(Color.storInk)
                 }
@@ -157,7 +157,7 @@ struct PayslipCheckCard: View {
             }
 
             Text(payslip.note)
-                .font(.text(12))
+                .storText(12)
                 .lineSpacing(2)
                 .foregroundStyle(Color.storSecondaryLabel)
                 .padding(.top, Spacing.sm + 2)

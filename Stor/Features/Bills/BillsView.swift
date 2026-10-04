@@ -4,6 +4,7 @@ import SwiftUI
 struct BillsView: View {
     @Environment(\.money) private var money
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
         VStack(spacing: 0) {
@@ -11,7 +12,7 @@ struct BillsView: View {
 
             ScrollView {
                 VStack(spacing: Spacing.md) {
-                    BillCalendar()
+                    if !typeSize.isAccessibilitySize { BillCalendar() }
 
                     RowCard {
                         ForEach(Array(MockData.bills.enumerated()), id: \.element.id) { index, bill in
@@ -34,7 +35,7 @@ struct BillsView: View {
         VStack(spacing: 0) {
             RowSeparator(isVisible: !isFirst)
 
-            HStack(spacing: 13) {
+            AdaptiveStack(spacing: 13) {
                 VStack(spacing: 0) {
                     MonoText("\(bill.day)", size: 15,
                              color: isImminent(bill) ? .storNegative : .storInk)
@@ -44,7 +45,7 @@ struct BillsView: View {
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(bill.name)
-                        .font(.text(14.5))
+                        .storText(14.5)
                         .tracking(-0.116)
                         .foregroundStyle(Color.storInk)
                     MonoText(bill.meta, size: 11, color: .storTertiaryLabel)
@@ -61,7 +62,7 @@ struct BillsView: View {
 
     /// Within four days of today, so it warrants the warning colour.
     private func isImminent(_ bill: Bill) -> Bool {
-        bill.day <= MockData.todayDay + 4
+        bill.day >= MockData.todayDay && bill.day <= MockData.todayDay + 4
     }
 }
 
@@ -80,6 +81,9 @@ struct BillCalendar: View {
             }
 
             LazyVGrid(columns: columns, spacing: Spacing.xxs) {
+                ForEach(0..<MockData.monthStartOffset, id: \.self) { _ in
+                    Color.clear.frame(height: 40).accessibilityHidden(true)
+                }
                 ForEach(1...MockData.daysInMonth, id: \.self) { day in
                     dayCell(day)
                 }
@@ -101,7 +105,9 @@ struct BillCalendar: View {
                 .frame(width: 5, height: 5)
         }
         .frame(maxWidth: .infinity)
-        .frame(height: 40)
+        .frame(minHeight: 44)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("September \(day)\(isToday ? ", today" : "")\(hasBill ? ", bill due" : "")")
         .background(cellFill(hasBill: hasBill, isToday: isToday))
         .clipShape(.rect(cornerRadius: Radius.xs, style: .continuous))
     }
@@ -109,7 +115,7 @@ struct BillCalendar: View {
     /// Days already gone recede; today inverts.
     private func dayColor(_ day: Int, isToday: Bool) -> Color {
         if isToday { return .storBackground }
-        return day < MockData.todayDay ? .storChevron : .storInk
+        return day < MockData.todayDay ? .storTertiaryLabel : .storInk
     }
 
     private func dotColor(hasBill: Bool, isToday: Bool) -> Color {

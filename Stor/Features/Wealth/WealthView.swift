@@ -12,7 +12,7 @@ struct WealthView: View {
                 MonoLabel("Household net worth", size: 10.5, tracking: 0.14)
 
                 Text(money(MockData.netWorth))
-                    .font(.display(52))
+                    .storDisplay(52)
                     .tracking(-1.3)
                     .foregroundStyle(Color.storInk)
                     .padding(.top, Spacing.sm)
@@ -20,11 +20,11 @@ struct WealthView: View {
                     .minimumScaleFactor(0.6)
                     .lineLimit(1)
 
-                HStack(alignment: .firstTextBaseline, spacing: Spacing.sm) {
+                AdaptiveStack(spacing: Spacing.sm) {
                     MonoText(money.signed(appState.netWorthRangeGain), size: 12.5,
                              color: .storPositive)
                     Text(appState.netWorthRange.caption)
-                        .font(.text(12.5))
+                        .storText(12.5)
                         .foregroundStyle(Color.storTertiaryLabel)
                 }
                 .padding(.bottom, Spacing.lg)
@@ -51,7 +51,7 @@ struct WealthView: View {
         @Bindable var state = appState
 
         return VStack(spacing: 14) {
-            Sparkline(values: MockData.netWorthSeries(appState.netWorthRange))
+            Sparkline(values: MockData.netWorthSeries(appState.netWorthRange), range: appState.netWorthRange)
                 .animation(.easeInOut(duration: 0.3), value: appState.netWorthRange)
 
             HStack(spacing: 5) {
@@ -62,15 +62,16 @@ struct WealthView: View {
                         appState.netWorthRange = range
                     } label: {
                         Text(range.rawValue)
-                            .font(.mono(11))
+                            .storMono(11)
                             .tracking(0.66)
                             .foregroundStyle(isOn ? Color.storBackground : Color.storSecondaryLabel)
                             .frame(maxWidth: .infinity)
-                            .frame(height: 28)
+                            .frame(minHeight: 44)
                             .background(isOn ? Color.storAccent : Color.storBackground)
                             .clipShape(.rect(cornerRadius: Radius.xs, style: .continuous))
                     }
                     .buttonStyle(.plain)
+                    .accessibilityAddTraits(isOn ? [.isSelected] : [])
                 }
             }
         }
@@ -85,7 +86,7 @@ struct WealthView: View {
             appState.showLiabilities.toggle()
         } label: {
             Text(appState.showLiabilities ? "Hide what you owe" : "Show what you owe")
-                .font(.text(12.5, weight: .medium))
+                .storText(12.5, weight: .medium)
                 .foregroundStyle(Color.storAccent)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 14)
@@ -116,7 +117,7 @@ struct AccountGroupCard: View {
             Circle().fill(group.dot).frame(width: 8, height: 8)
 
             Text(group.name)
-                .font(.text(13, weight: .semibold))
+                .storText(13, weight: .semibold)
                 .tracking(-0.065)
                 .foregroundStyle(Color.storInk)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -132,10 +133,10 @@ struct AccountGroupCard: View {
         VStack(spacing: 0) {
             RowSeparator(isVisible: true)
 
-            HStack(spacing: Spacing.md) {
+            AdaptiveStack(spacing: Spacing.md) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(account.name)
-                        .font(.text(14))
+                        .storText(14)
                         .tracking(-0.07)
                         .foregroundStyle(Color.storInk)
                     MonoText(account.kind, size: 11, color: .storTertiaryLabel)

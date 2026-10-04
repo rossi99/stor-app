@@ -9,7 +9,7 @@ struct TakeawayCard: View {
         VStack(alignment: .leading, spacing: 9) {
             MonoLabel(label, size: 10, color: .storLimeLabel)
             Text(text)
-                .font(.text(15.5))
+                .storText(15.5)
                 .tracking(-0.124)
                 .lineSpacing(3)
                 .foregroundStyle(Color.storLimeInk)

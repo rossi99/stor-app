@@ -1,20 +1,20 @@
 import SwiftUI
 
-/// The top four envelopes for the selected ledger, with a link to the full set.
+/// The highest-priority envelopes for the selected ledger, with a link to the full set.
 struct EnvelopeSummaryCard: View {
     @Environment(AppState.self) private var appState
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             CardHeader(
-                label: "\(appState.name(for: appState.ledger)) envelopes",
-                actionTitle: "All"
+                label: appState.envelopes.contains(where: \.isOver) ? "Needs attention" : "Budget check",
+                actionTitle: "Budget"
             ) {
                 appState.selectedTab = .budget
             }
             .padding(.bottom, 14)
 
-            ForEach(appState.envelopes.prefix(4)) { envelope in
+            ForEach(appState.homeEnvelopes) { envelope in
                 EnvelopeSummaryRow(envelope: envelope, accent: appState.ledger.accent)
             }
         }
@@ -38,12 +38,12 @@ struct BillsPreviewCard: View {
         NavigationLink(value: Route.bills) {
             VStack(alignment: .leading, spacing: 0) {
                 CardHeader(
-                    label: "Coming out of the pot",
+                    label: "Upcoming shared bills",
                     trailingText: "\(money(MockData.committedRemaining)) by 22 Sep"
                 )
                 .padding(.bottom, 13)
 
-                HStack(spacing: Spacing.sm) {
+                AdaptiveStack(spacing: Spacing.sm) {
                     ForEach(upcoming) { bill in
                         billTile(bill)
                     }
@@ -62,14 +62,14 @@ struct BillsPreviewCard: View {
                       color: .storTertiaryLabel)
 
             Text(money(bill.amount))
-                .font(.text(13, weight: .medium))
+                .storText(13, weight: .medium)
                 .tracking(-0.13)
                 .foregroundStyle(Color.storInk)
                 .padding(.top, 5)
                 .padding(.bottom, 2)
 
             Text(bill.isEstimated ? "\(bill.name), est." : bill.name)
-                .font(.text(11))
+                .storText(11)
                 .lineSpacing(1)
                 .foregroundStyle(Color.storSecondaryLabel)
                 .multilineTextAlignment(.leading)
@@ -84,7 +84,7 @@ struct BillsPreviewCard: View {
     /// September 2026 starts on a Tuesday, so day-of-week follows from the date.
     private func weekdayLabel(for day: Int) -> String {
         let names = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]
-        return "\(names[(day + 5) % 7]) \(day)"
+        return "\(names[(MockData.monthStartOffset + day - 1) % 7]) \(day)"
     }
 }
 
@@ -94,7 +94,7 @@ struct LatestCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            CardHeader(label: "Latest", actionTitle: "Feed") {
+            CardHeader(label: "Recent activity", actionTitle: "Ledger") {
                 appState.selectedTab = .ledger
             }
             .padding(.bottom, Spacing.xs)

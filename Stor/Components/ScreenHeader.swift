@@ -12,7 +12,7 @@ struct ScreenTitle: View {
 
     var body: some View {
         Text(text)
-            .font(.display(size))
+            .storDisplay(size)
             .tracking(-0.015 * size)
             .foregroundStyle(Color.storInk)
     }
@@ -29,12 +29,13 @@ struct BackHeader: View {
                 Image(systemName: "chevron.left")
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(Color.storInk)
-                    .frame(width: 34, height: 34)
+                    .frame(width: 44, height: 44)
                     .background(Color.storSurface)
                     .clipShape(.circle)
                     .overlay { Circle().strokeBorder(Color.storBorder, lineWidth: Stroke.hairline) }
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("Back")
 
             ScreenTitle(title, size: 26)
         }
@@ -53,7 +54,7 @@ struct CardHeader: View {
     var action: (() -> Void)?
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline) {
+        AdaptiveStack(spacing: Spacing.sm) {
             MonoLabel(label)
             Spacer(minLength: Spacing.sm)
 
@@ -63,7 +64,8 @@ struct CardHeader: View {
 
             if let actionTitle, let action {
                 Button(actionTitle, action: action)
-                    .font(.text(12.5, weight: .medium))
+                    .storText(14, weight: .medium)
+                    .frame(minWidth: 44, minHeight: 44)
                     .foregroundStyle(Color.storAccent)
                     .buttonStyle(.plain)
             }

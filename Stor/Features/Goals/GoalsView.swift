@@ -32,18 +32,18 @@ struct GoalsView: View {
             MonoLabel("Emergency fund", size: 9.5, tracking: 0.12,
                       color: .storAccent.opacity(0.7))
 
-            HStack(alignment: .firstTextBaseline, spacing: Spacing.sm) {
+            AdaptiveStack(spacing: Spacing.sm) {
                 Text(String(format: "%.1f", MockData.emergencyFundMonths))
-                    .font(.display(34))
+                    .storDisplay(34)
                     .foregroundStyle(Color.storAccent)
                 Text("months of household outgoings")
-                    .font(.text(13.5))
+                    .storText(13.5)
                     .foregroundStyle(Color.storAccent.opacity(0.75))
             }
             .padding(.top, Spacing.sm)
 
             Text(MockData.emergencyFundNote)
-                .font(.text(12.5))
+                .storText(12.5)
                 .lineSpacing(2)
                 .foregroundStyle(Color.storAccent.opacity(0.75))
                 .padding(.top, Spacing.sm + 2)
@@ -63,13 +63,13 @@ struct GoalCard: View {
             header
                 .padding(.bottom, Spacing.lg)
 
-            HStack(alignment: .firstTextBaseline, spacing: 7) {
+            AdaptiveStack(spacing: 7) {
                 Text(money(goal.saved))
-                    .font(.display(34))
+                    .storDisplay(34)
                     .tracking(-0.51)
                     .foregroundStyle(Color.storInk)
                 Text("of \(money(goal.target))")
-                    .font(.text(13.5))
+                    .storText(13.5)
                     .foregroundStyle(Color.storTertiaryLabel)
             }
             .padding(.bottom, Spacing.md)
@@ -80,7 +80,7 @@ struct GoalCard: View {
             contribution
 
             Text(goal.note)
-                .font(.text(12.5))
+                .storText(12.5)
                 .lineSpacing(2)
                 .foregroundStyle(Color.storSecondaryLabel)
                 .padding(.top, Spacing.md)
@@ -94,7 +94,7 @@ struct GoalCard: View {
         HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 3) {
                 Text(goal.name)
-                    .font(.text(17, weight: .semibold))
+                    .storText(17, weight: .semibold)
                     .tracking(-0.255)
                     .foregroundStyle(Color.storInk)
                 MonoText(eta, size: 12, color: .storTertiaryLabel)
@@ -112,7 +112,7 @@ struct GoalCard: View {
     }
 
     private var contribution: some View {
-        HStack(spacing: Spacing.md) {
+        AdaptiveStack(spacing: Spacing.md) {
             VStack(alignment: .leading, spacing: 3) {
                 MonoLabel("Monthly", size: 9.5, tracking: 0.12)
                 MonoText("\(money(goal.monthly))/mo", size: 15)
@@ -120,6 +120,8 @@ struct GoalCard: View {
             .frame(maxWidth: .infinity, alignment: .leading)
 
             CircleStepper(
+                context: "\(goal.name) monthly contribution by \(money(Goal.step))",
+                canDecrement: goal.monthly > Goal.minimumMonthly,
                 onDecrement: { appState.adjustGoal(goal.id, by: -Goal.step) },
                 onIncrement: { appState.adjustGoal(goal.id, by: Goal.step) }
             )

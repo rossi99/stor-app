@@ -15,12 +15,12 @@ struct StatTile: View {
                     .padding(.bottom, 9)
 
                 Text(value)
-                    .font(.display(23))
+                    .storDisplay(23)
                     .tracking(-0.23)
                     .foregroundStyle(Color.storInk)
 
                 Text(footnote)
-                    .font(.text(12))
+                    .storText(12)
                     .foregroundStyle(footnoteColor)
                     .padding(.top, 3)
             }

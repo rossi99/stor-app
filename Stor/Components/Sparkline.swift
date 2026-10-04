@@ -1,72 +1,91 @@
 import SwiftUI
+import Charts
 
-/// The net-worth line and its filled area. Values are normalised against their
-/// own min and max, so every range fills the frame regardless of scale.
+/// Dated values with an explicit scale and native chart accessibility.
 struct Sparkline: View {
     let values: [Double]
-    var lineColor: Color = .storAccent
-    var areaColor: Color = .storAccentSoft
-    var lineWidth: CGFloat = 2
-    /// Headroom above the peak so the stroke isn't clipped at the top.
-    private let topInset: CGFloat = 8
+    var range: NetWorthRange = .oneYear
+    @Environment(\.money) private var money
+    @State private var selectedDate: Date?
+
+    private var points: [Point] {
+        let end = MockData.referenceDate
+        let calendar = Calendar(identifier: .gregorian)
+        let start: Date
+        switch range {
+        case .oneMonth:
+            start = calendar.date(from: calendar.dateComponents([.year, .month], from: end))!
+        case .sixMonths: start = calendar.date(byAdding: .month, value: -6, to: end)!
+        case .oneYear: start = calendar.date(byAdding: .month, value: -12, to: end)!
+        case .all: start = calendar.date(byAdding: .year, value: -7, to: end)!
+        }
+        return values.enumerated().map { index, value in
+            Point(id: index, date: start.addingTimeInterval(end.timeIntervalSince(start)
+                  * Double(index) / Double(max(1, values.count - 1))), value: value)
+        }
+    }
+
+    private var selectedPoint: Point? {
+        guard let selectedDate else { return nil }
+        return points.min { abs($0.date.timeIntervalSince(selectedDate)) < abs($1.date.timeIntervalSince(selectedDate)) }
+    }
 
     var body: some View {
-        GeometryReader { geo in
-            let points = points(in: geo.size)
+        if money.privacyMode {
+            Label("Chart hidden while balances are hidden", systemImage: "eye.slash")
+                .font(.body).foregroundStyle(Color.storSecondaryLabel)
+                .frame(maxWidth: .infinity, minHeight: 160)
+        } else {
+            VStack(alignment: .leading, spacing: Spacing.sm) {
+                if let point = selectedPoint {
+                    Text("\(point.date.formatted(date: .abbreviated, time: .omitted)) · \(money(point.value * 1000))")
+                        .font(.headline)
+                } else {
+                    Text("Touch and hold to explore values")
+                        .font(.footnote).foregroundStyle(Color.storSecondaryLabel)
+                }
+                Chart(points) { point in
+                    LineMark(x: .value("Date", point.date), y: .value("Net worth", point.value))
+                        .foregroundStyle(Color.storAccent)
+                        .accessibilityLabel(point.date.formatted(date: .abbreviated, time: .omitted))
+                        .accessibilityValue(money(point.value * 1000))
+                    if let selectedPoint, selectedPoint.id == point.id {
+                        RuleMark(x: .value("Selected date", point.date))
+                            .foregroundStyle(Color.storSecondaryLabel)
+                        PointMark(x: .value("Date", point.date), y: .value("Net worth", point.value))
+                            .foregroundStyle(Color.storAccent)
+                    }
+                }
+                .chartYScale(domain: ((values.min() ?? 0) - 1)...((values.max() ?? 1) + 1))
+                .chartYAxis {
+                    AxisMarks(position: .leading, values: .automatic(desiredCount: 3)) { value in
+                        AxisGridLine()
+                        AxisValueLabel {
+                            if let amount = value.as(Double.self) { Text(money.thousands(amount * 1000)) }
+                        }
+                    }
+                }
+                .chartXAxis {
+                    AxisMarks(values: .automatic(desiredCount: 3)) { _ in
+                        AxisValueLabel(format: range == .all ? .dateTime.year() : .dateTime.month(.abbreviated).day())
+                    }
+                }
+                .chartXSelection(value: $selectedDate)
+                .frame(height: 180)
+                .accessibilityLabel("Household net worth, \(range.caption)")
 
-            ZStack {
-                area(points, height: geo.size.height).fill(areaColor)
-
-                line(points).stroke(
-                    lineColor,
-                    style: StrokeStyle(lineWidth: lineWidth, lineCap: .round, lineJoin: .round)
-                )
+                if let first = points.first, let last = points.last {
+                    Text("\(first.date.formatted(date: .abbreviated, time: .omitted)): \(money(first.value * 1000)) → \(last.date.formatted(date: .abbreviated, time: .omitted)): \(money(last.value * 1000))")
+                        .font(.footnote).foregroundStyle(Color.storSecondaryLabel)
+                }
             }
-        }
-        .frame(height: 96)
-    }
-
-    private func points(in size: CGSize) -> [CGPoint] {
-        guard values.count > 1 else {
-            return [CGPoint(x: 0, y: size.height / 2)]
-        }
-
-        let lowest = values.min() ?? 0
-        let highest = values.max() ?? 0
-        let span = highest - lowest
-        let usable = size.height - topInset - lineWidth
-
-        return values.enumerated().map { index, value in
-            let x = CGFloat(index) / CGFloat(values.count - 1) * size.width
-            // A flat series sits on the baseline rather than dividing by zero.
-            let normalised = span > 0 ? (value - lowest) / span : 0
-            let y = topInset + usable * (1 - normalised)
-            return CGPoint(x: x, y: y)
+            .onChange(of: range) { selectedDate = nil }
         }
     }
 
-    private func line(_ points: [CGPoint]) -> Path {
-        Path { path in
-            guard let first = points.first else { return }
-            path.move(to: first)
-            for point in points.dropFirst() { path.addLine(to: point) }
-        }
+    private struct Point: Identifiable {
+        let id: Int
+        let date: Date
+        let value: Double
     }
-
-    private func area(_ points: [CGPoint], height: CGFloat) -> Path {
-        Path { path in
-            guard let first = points.first, let last = points.last else { return }
-            path.move(to: first)
-            for point in points.dropFirst() { path.addLine(to: point) }
-            path.addLine(to: CGPoint(x: last.x, y: height))
-            path.addLine(to: CGPoint(x: first.x, y: height))
-            path.closeSubpath()
-        }
-    }
-}
-
-#Preview {
-    Sparkline(values: [219.4, 221, 222.3, 223.1, 224.8, 226, 227.2, 228.1, 229.4, 230, 231.2, 233.94])
-        .padding()
-        .background(Color.storSurface)
 }

@@ -9,6 +9,13 @@ struct HomeView: View {
 
         VStack(spacing: 0) {
             header
+            HStack {
+                Text("Your spending today").storText(14).foregroundStyle(Color.storSecondaryLabel)
+                Spacer()
+                AddSpendButton()
+            }
+            .screenInset()
+            .padding(.bottom, Spacing.sm)
             ledgerToggle
 
             ScrollView {
@@ -19,10 +26,10 @@ struct HomeView: View {
                         daysLeft: MockData.daysLeftInMonth
                     )
 
-                    statTiles
                     EnvelopeSummaryCard()
                     BillsPreviewCard()
                     LatestCard()
+                    statTiles
                 }
                 .screenInset()
                 .padding(.top, Spacing.xxs)
@@ -38,7 +45,7 @@ struct HomeView: View {
             VStack(alignment: .leading, spacing: 1) {
                 MonoLabel(MockData.today, size: 10.5, tracking: 0.14)
                 Text(MockData.householdName)
-                    .font(.display(27))
+                    .storDisplay(27)
                     .tracking(-0.27)
                     .foregroundStyle(Color.storInk)
                     .minimumScaleFactor(0.7)
@@ -52,7 +59,7 @@ struct HomeView: View {
                     Image(systemName: "bell")
                         .font(.system(size: 15, weight: .regular))
                         .foregroundStyle(Color.storInk)
-                        .frame(width: 36, height: 36)
+                        .frame(width: 44, height: 44)
                         .background(Color.storSurface)
                         .clipShape(.circle)
                         .overlay {
@@ -67,16 +74,18 @@ struct HomeView: View {
                         }
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("Alerts")
 
                 NavigationLink(value: Route.household) {
                     Text(appState.members.map(\.initials).map { String($0.prefix(1)) }.joined())
-                        .font(.mono(11.5, weight: .semibold))
+                        .storMono(11.5, weight: .semibold)
                         .foregroundStyle(Color.storBackground)
-                        .frame(width: 36, height: 36)
+                        .frame(width: 44, height: 44)
                         .background(Color.storAccent)
                         .clipShape(.circle)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("Household settings")
             }
         }
         .screenInset()
@@ -98,7 +107,14 @@ struct HomeView: View {
     }
 
     private var statTiles: some View {
-        HStack(spacing: Spacing.sm + 2) {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: Spacing.sm + 2) { summaryTiles }
+            VStack(spacing: Spacing.sm) { summaryTiles }
+        }
+    }
+
+    @ViewBuilder private var summaryTiles: some View {
+        Group {
             StatTile(
                 label: "August recap",
                 value: money.signed(MockData.augustRecapDelta),
@@ -114,6 +130,7 @@ struct HomeView: View {
                 footnote: "\(money.signed(MockData.netWorthMonthlyChange)) this month",
                 footnoteColor: .storPositive
             ) {
+                appState.wealthPath = []
                 appState.selectedTab = .wealth
             }
         }

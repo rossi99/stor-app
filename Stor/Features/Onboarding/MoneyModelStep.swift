@@ -1,69 +1,24 @@
 import SwiftUI
 
-/// Step 1 — this decides the shape of everything else.
+/// Introduce the supported arrangement without offering incomplete flows.
 struct MoneyModelStep: View {
-    @Environment(AppState.self) private var appState
-
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            StepHeading(lead: "How do you two", trail: "keep your money?", step: 1)
-
-            Text("This decides the shape of everything else. You can change it later.")
+        VStack(alignment: .leading, spacing: Spacing.xl) {
+            StepHeading(lead: "Your own money.", trail: "A shared plan.", step: 1)
+            Text("Stór uses two personal accounts and one joint pot. Keep personal allowances separate, and plan your shared spending together.")
                 .onboardingBody()
-                .frame(maxWidth: 290, alignment: .leading)
-                .padding(.bottom, 30)
-
-            VStack(spacing: Spacing.sm + 2) {
-                ForEach(MoneyModel.allCases) { model in
-                    optionRow(model)
-                }
+            VStack(alignment: .leading, spacing: Spacing.lg) {
+                Label("Two personal budgets", systemImage: "person.2")
+                Label("One pot for shared bills", systemImage: "tray.full")
+                Label("Monthly contributions you can edit", systemImage: "calendar")
             }
-        }
-    }
-
-    private func optionRow(_ model: MoneyModel) -> some View {
-        let isOn = appState.moneyModel == model
-
-        return Button {
-            appState.moneyModel = model
-        } label: {
-            HStack(alignment: .top, spacing: 13) {
-                Circle()
-                    .fill(isOn ? Color.storAccent : .clear)
-                    .frame(width: 18, height: 18)
-                    .overlay {
-                        Circle().strokeBorder(
-                            isOn ? Color.storAccent : Color.storQuaternaryLabel,
-                            lineWidth: 1.5
-                        )
-                    }
-                    .padding(.top, 1)
-
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(model.title)
-                        .font(.text(15, weight: .semibold))
-                        .tracking(-0.15)
-                        .foregroundStyle(Color.storInk)
-                    Text(model.summary)
-                        .font(.text(12.5))
-                        .lineSpacing(2)
-                        .foregroundStyle(Color.storSecondaryLabel)
-                        .multilineTextAlignment(.leading)
-                }
-
-                Spacer(minLength: 0)
-            }
+            .font(.body)
+            .foregroundStyle(Color.storInk)
             .padding(Spacing.lg)
-            .background(isOn ? Color.storAccentSoft : Color.storSurface)
-            .clipShape(.rect(cornerRadius: Radius.md, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: Radius.md, style: .continuous)
-                    .strokeBorder(
-                        isOn ? Color.storAccent.opacity(0.45) : Color.storBorder,
-                        lineWidth: Stroke.hairline
-                    )
-            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .storCard()
+            Text("Next, choose your accounts and monthly contributions. You can edit both in Household.")
+                .onboardingBody()
         }
-        .buttonStyle(.plain)
     }
 }

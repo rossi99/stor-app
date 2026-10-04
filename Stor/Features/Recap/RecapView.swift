@@ -44,14 +44,15 @@ struct RecapView: View {
                     appState.expandedCategory = nil
                 } label: {
                     Text(recap.id)
-                        .font(.text(12.5, weight: isOn ? .semibold : .medium))
+                        .storText(12.5, weight: isOn ? .semibold : .medium)
                         .foregroundStyle(isOn ? Color.storBackground : Color.storSecondaryLabel)
                         .frame(maxWidth: .infinity)
-                        .frame(height: 32)
+                        .frame(minHeight: 44)
                         .background(isOn ? Color.storInk : Color.storSurface)
                         .clipShape(.rect(cornerRadius: Radius.xs + 1, style: .continuous))
                 }
                 .buttonStyle(.plain)
+                .accessibilityAddTraits(isOn ? [.isSelected] : [])
             }
         }
     }
@@ -64,7 +65,7 @@ struct RecapView: View {
                       color: .storBackground.opacity(0.6))
 
             Text(money(recap.total))
-                .font(.display(46))
+                .storDisplay(46)
                 .tracking(-0.92)
                 .foregroundStyle(Color.storBackground)
                 .padding(.top, Spacing.md)
@@ -73,7 +74,7 @@ struct RecapView: View {
                 .lineLimit(1)
 
             Text(varianceLine(recap))
-                .font(.text(13.5))
+                .storText(13.5)
                 .lineSpacing(2)
                 .foregroundStyle(Color.storBackground.opacity(0.72))
 

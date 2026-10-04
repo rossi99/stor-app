@@ -23,11 +23,11 @@ struct SegmentedPill<Value: Hashable>: View {
                             Circle().fill(dot).frame(width: 7, height: 7)
                         }
                         Text(label(option))
-                            .font(.text(13, weight: isOn ? .semibold : .medium))
+                            .storText(13, weight: isOn ? .semibold : .medium)
                             .tracking(-0.065)
                     }
                     .frame(maxWidth: .infinity)
-                    .frame(height: height)
+                    .frame(minHeight: max(44, height))
                     .foregroundStyle(isOn ? Color.storInk : Color.storSecondaryLabel)
                     .background {
                         if isOn {
@@ -38,6 +38,7 @@ struct SegmentedPill<Value: Hashable>: View {
                     }
                 }
                 .buttonStyle(.plain)
+                .accessibilityAddTraits(isOn ? [.isSelected] : [])
             }
         }
         .padding(Spacing.xxs)
@@ -62,10 +63,10 @@ struct ChipRow<Value: Hashable>: View {
                         selection = option
                     } label: {
                         Text(label(option))
-                            .font(.text(12.5, weight: isOn ? .semibold : .medium))
+                            .storText(12.5, weight: isOn ? .semibold : .medium)
                             .foregroundStyle(isOn ? Color.storBackground : Color.storBodyInk)
                             .padding(.horizontal, 13)
-                            .frame(height: 30)
+                            .frame(minHeight: 44)
                             .background(isOn ? Color.storInk : Color.storSurface)
                             .clipShape(.capsule)
                             .overlay {
@@ -76,6 +77,7 @@ struct ChipRow<Value: Hashable>: View {
                             }
                     }
                     .buttonStyle(.plain)
+                    .accessibilityAddTraits(isOn ? [.isSelected] : [])
                 }
             }
             .padding(.horizontal, Spacing.screen)

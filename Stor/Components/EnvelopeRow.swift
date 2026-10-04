@@ -10,9 +10,9 @@ struct EnvelopeSummaryRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.xs) {
-            HStack(alignment: .firstTextBaseline) {
+            AdaptiveStack(spacing: Spacing.sm) {
                 Text(envelope.name)
-                    .font(.text(14))
+                    .storText(14)
                     .tracking(-0.07)
                     .foregroundStyle(Color.storInk)
                 Spacer(minLength: Spacing.sm)
@@ -48,21 +48,23 @@ struct EnvelopeDetailRow: View {
     var body: some View {
         Button(action: action) {
             VStack(alignment: .leading, spacing: 0) {
-                HStack(alignment: .firstTextBaseline) {
+                AdaptiveStack(spacing: Spacing.sm) {
                     Text(envelope.name)
-                        .font(.text(14.5))
+                        .storText(14.5)
                         .tracking(-0.116)
                         .foregroundStyle(Color.storInk)
                     Spacer(minLength: Spacing.sm)
                     MonoText(envelope.rightLabel(money), size: 12.5, color: barColor)
+                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(Color.storSecondaryLabel)
                 }
                 .padding(.bottom, Spacing.sm)
 
                 ProgressTrack(fraction: envelope.fraction, height: TrackHeight.row, fill: barColor)
 
-                HStack(alignment: .firstTextBaseline) {
-                    MonoText(detailLine, size: 10.5, color: .storQuaternaryLabel)
-                    Spacer(minLength: Spacing.sm)
+                VStack(alignment: .leading, spacing: Spacing.xxs) {
+                    MonoText(detailLine, size: 13, color: .storQuaternaryLabel)
                     MonoText(envelope.pace, size: 10.5, color: .storQuaternaryLabel)
                 }
                 .padding(.top, Spacing.xs)
@@ -80,6 +82,8 @@ struct EnvelopeDetailRow: View {
             }
         }
         .buttonStyle(.plain)
+        .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
+        .accessibilityHint("Shows or hides the three-month average")
         .animation(.easeInOut(duration: 0.2), value: isExpanded)
     }
 }

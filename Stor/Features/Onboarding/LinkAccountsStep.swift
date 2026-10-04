@@ -4,22 +4,24 @@ import SwiftUI
 struct LinkAccountsStep: View {
     @Environment(AppState.self) private var appState
 
+    var showsHeading = true
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            StepHeading(lead: "Link the accounts", trail: "that matter", step: 2)
+            if showsHeading { StepHeading(lead: "Link the accounts", trail: "that matter", step: 2) }
 
             Text("\(appState.linkedAccounts.count) of \(MockData.linkableAccounts.count) accounts linked. Personal accounts stay private unless you share them.")
                 .onboardingBody()
                 .padding(.bottom, 22)
 
-            ScrollView {
+            VStack {
                 VStack(spacing: Spacing.sm) {
                     ForEach(MockData.linkableAccounts) { account in
                         accountRow(account)
                     }
                 }
             }
-            .scrollIndicators(.hidden)
+
         }
     }
 
@@ -31,7 +33,7 @@ struct LinkAccountsStep: View {
         } label: {
             HStack(spacing: Spacing.md) {
                 Text(account.initial)
-                    .font(.mono(12, weight: .semibold))
+                    .storMono(12, weight: .semibold)
                     .foregroundStyle(Color.storInk)
                     .frame(width: 30, height: 30)
                     .background(account.ledger.soft)
@@ -39,7 +41,7 @@ struct LinkAccountsStep: View {
 
                 VStack(alignment: .leading, spacing: 0) {
                     Text(account.name)
-                        .font(.text(14.5, weight: .medium))
+                        .storText(14.5, weight: .medium)
                         .tracking(-0.145)
                         .foregroundStyle(Color.storInk)
                     MonoText(account.owner, size: 11.5,

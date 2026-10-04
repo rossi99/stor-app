@@ -36,6 +36,7 @@ final class AppState {
     var currency: Currency = .gbp
     var privacyMode = false
     var showPayslipCheck = true
+    var topUpDay = 10
 
     var money: MoneyFormatter {
         MoneyFormatter(currency: currency, privacyMode: privacyMode)
@@ -72,9 +73,14 @@ final class AppState {
         potContribution < MockData.averageSharedOutgoings
     }
 
-    func adjustContribution(_ ledger: Ledger, by delta: Double) {
-        guard let i = members.firstIndex(where: { $0.ledger == ledger }) else { return }
-        members[i].contribution = max(0, members[i].contribution + delta)
+    @discardableResult
+    func saveContributions(_ draft: ContributionDraft) -> Bool {
+        guard let values = draft.values,
+              Set(values.keys) == Set(members.map(\.ledger)) else { return false }
+        for index in members.indices {
+            members[index].contribution = values[members[index].ledger]!
+        }
+        return true
     }
 
     // MARK: - Ledger selection
@@ -92,7 +98,42 @@ final class AppState {
 
     // MARK: - Envelopes
 
-    var envelopes: [Envelope] { MockData.envelopes(for: ledger) }
+    var envelopes: [Envelope] {
+        let additions = addedTransactions.filter { $0.ledger == ledger && $0.amount < 0 }
+        var result = MockData.envelopes(for: ledger).map { envelope in
+            let extra = additions.filter { $0.category == envelope.name }
+                .reduce(0) { $0 - $1.amount }
+            guard extra > 0 else { return envelope }
+            let spent = envelope.spent + extra
+            return Envelope(name: envelope.name, spent: spent, budget: envelope.budget,
+                            detail: "Includes newly added spending",
+                            pace: spent > envelope.budget ? "Over budget" : "Within budget")
+        }
+        let names = Set(result.map(\.name))
+        for category in Set(additions.map(\.category)).subtracting(names).sorted() {
+            result.append(Envelope(name: category,
+                                   spent: additions.filter { $0.category == category }.reduce(0) { $0 - $1.amount },
+                                   budget: 0, detail: "No budget set", pace: "Unbudgeted"))
+        }
+        return result
+    }
+
+    var priorityEnvelopes: [Envelope] {
+        envelopes.sorted {
+            if $0.isOver != $1.isOver { return $0.isOver }
+            if $0.isOver { return $0.overspend > $1.overspend }
+            return $0.fraction > $1.fraction
+        }
+    }
+
+    var homeEnvelopes: [Envelope] {
+        let over = priorityEnvelopes.filter(\.isOver)
+        return Array((over.isEmpty ? priorityEnvelopes : over).prefix(3))
+    }
+
+    private var newSpending: Double {
+        addedTransactions.filter { $0.ledger == ledger && $0.amount < 0 }.reduce(0) { $0 - $1.amount }
+    }
 
     var budgetedTotal: Double { envelopes.reduce(0) { $0 + $1.budget } }
     var spentTotal: Double { envelopes.reduce(0) { $0 + $1.spent } }
@@ -108,20 +149,20 @@ final class AppState {
         case .joint:
             SafeToSpend(
                 pot: potContribution + 180,
-                spent: 2964,
+                spent: 2964 + newSpending,
                 committed: MockData.committedRemaining,
                 label: "Safe to spend · joint",
                 caption: "after the \(money(MockData.committedRemaining)) still to leave the pot this month"
             )
         case .ana:
             SafeToSpend(
-                pot: 700, spent: 383, committed: 0,
+                pot: 700, spent: 383 + newSpending, committed: 0,
                 label: "Safe to spend · Ana",
                 caption: "Personal allowance. Sam sees the total, not the merchants."
             )
         case .sam:
             SafeToSpend(
-                pot: 700, spent: 512, committed: 0,
+                pot: 700, spent: 512 + newSpending, committed: 0,
                 label: "Safe to spend · Sam",
                 caption: "Personal allowance. Ana sees the total, not the merchants."
             )
@@ -192,8 +233,9 @@ final class AppState {
     var isAddingSpend = false
     var draft = SpendDraft()
 
-    func openAddSpend() {
+    func openAddSpend(for source: Ledger? = nil) {
         draft = SpendDraft()
+        draft.ledger = source ?? ledger
         isAddingSpend = true
     }
 
@@ -204,7 +246,7 @@ final class AppState {
 
     /// Commits the draft and drops the user into the ledger to see it land.
     func commitSpend() {
-        guard draft.amount > 0 else { return }
+        guard draft.isValid else { return }
         addedTransactions.insert(draft.asTransaction(), at: 0)
         isAddingSpend = false
         draft = SpendDraft()

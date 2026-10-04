@@ -41,52 +41,56 @@ struct AuthView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                wordmark
-                    .padding(.bottom, 30)
+                VStack(alignment: .leading, spacing: 0) {
+                    wordmark
+                        .padding(.bottom, 30)
 
-                SegmentedPill(options: AuthMode.allCases, selection: $mode,
-                              height: 40, label: { $0.rawValue })
-                    .padding(.bottom, Spacing.xl)
+                    SegmentedPill(options: AuthMode.allCases, selection: $mode,
+                                  height: 40, label: { $0.rawValue })
+                        .padding(.bottom, Spacing.xl)
 
-                Text(caption)
-                    .onboardingBody()
-                    .frame(maxWidth: 300, alignment: .leading)
-                    .padding(.bottom, Spacing.xxl)
+                    Text(caption)
+                        .onboardingBody()
+                        .frame(maxWidth: 300, alignment: .leading)
+                        .padding(.bottom, Spacing.xxl)
 
-                fields
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+                    fields
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
 
-            PrimaryButton(
-                title: mode.rawValue,
-                isEnabled: canContinue
-            ) {
-                switch mode {
-                case .signIn: appState.signIn(email: trimmedEmail)
-                case .signUp: appState.signUp(email: trimmedEmail)
+                PrimaryButton(
+                    title: mode.rawValue,
+                    isEnabled: canContinue
+                ) {
+                    switch mode {
+                    case .signIn: appState.signIn(email: trimmedEmail)
+                    case .signUp: appState.signUp(email: trimmedEmail)
+                    }
+                }
+                .padding(.top, Spacing.xxl - 2)
+
+                divider
+                    .padding(.vertical, Spacing.xl)
+
+                VStack(spacing: Spacing.md) {
+                    SocialButton(title: "Continue with Apple", symbol: "apple.logo") {
+                        continueWith(.apple)
+                    }
+
+                    SocialButton(title: "Continue with Google") {
+                        continueWith(.google)
+                    }
                 }
             }
-            .padding(.top, Spacing.xxl - 2)
-
-            divider
-                .padding(.vertical, Spacing.xl)
-
-            VStack(spacing: Spacing.md) {
-                SocialButton(title: "Continue with Apple", symbol: "apple.logo") {
-                    continueWith(.apple)
-                }
-
-                SocialButton(title: "Continue with Google") {
-                    continueWith(.google)
-                }
-            }
+            .padding(.horizontal, Spacing.xxl)
+            .padding(.top, Spacing.xxl)
+            .padding(.bottom, Spacing.xl)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color.storBackground)
         }
-        .padding(.horizontal, Spacing.xxl)
-        .padding(.top, Spacing.xxl)
-        .padding(.bottom, Spacing.xl)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .scrollDismissesKeyboard(.interactively)
         .background(Color.storBackground)
         .animation(.easeInOut(duration: 0.25), value: mode)
     }
@@ -120,7 +124,7 @@ struct AuthView: View {
     private var wordmark: some View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
             Text("Stór")
-                .font(.display(34))
+                .storDisplay(34)
                 .tracking(-0.4)
                 .foregroundStyle(Color.storInk)
 
@@ -136,6 +140,11 @@ struct AuthView: View {
 
             AuthField(label: "Password", text: $password, isSecure: true,
                       content: mode == .signIn ? .password : .newPassword)
+            if mode == .signUp {
+                Text("Use at least 8 characters.")
+                    .storText(14).foregroundStyle(Color.storSecondaryLabel)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
         }
     }
 
@@ -157,12 +166,13 @@ struct SocialButton: View {
                 }
 
                 Text(title)
-                    .font(.text(15, weight: .semibold))
+                    .storText(15, weight: .semibold)
                     .tracking(-0.15)
             }
             .foregroundStyle(Color.storInk)
             .frame(maxWidth: .infinity)
-            .frame(height: 50)
+            .padding(.vertical, 12)
+            .frame(minHeight: 50)
             .background(Color.storSurface)
             .clipShape(.capsule)
             .overlay {
@@ -181,20 +191,47 @@ struct AuthField: View {
     var isSecure = false
     var keyboard: UIKeyboardType = .default
     var content: UITextContentType?
+    @State private var showsPassword = false
+    @FocusState private var isFocused: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
             MonoLabel(label, size: 10.5, tracking: 0.14,
                       color: .storTertiaryLabel)
 
-            Group {
+            HStack(spacing: Spacing.sm) {
+                Group {
+                    if isSecure && !showsPassword {
+                        SecureField("", text: $text)
+                    } else {
+                        TextField("", text: $text)
+                    }
+                }
+                .focused($isFocused)
+                .accessibilityLabel(label)
+                .submitLabel(.done)
+                .onSubmit { isFocused = false }
+
                 if isSecure {
-                    SecureField("", text: $text)
-                } else {
-                    TextField("", text: $text)
+                    Button {
+                        let wasFocused = isFocused
+                        showsPassword.toggle()
+                        if wasFocused {
+                            Task { @MainActor in
+                                await Task.yield()
+                                isFocused = true
+                            }
+                        }
+                    } label: {
+                        Image(systemName: showsPassword ? "eye.slash" : "eye")
+                            .font(.body)
+                            .frame(width: 44, height: 44)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(showsPassword ? "Hide password" : "Show password")
                 }
             }
-            .font(.text(15))
+            .storText(15)
             .foregroundStyle(Color.storInk)
             .tint(Color.storAccent)
             .textInputAutocapitalization(.never)
@@ -202,7 +239,8 @@ struct AuthField: View {
             .keyboardType(keyboard)
             .textContentType(content)
             .padding(.horizontal, 14)
-            .frame(height: 50)
+            .padding(.vertical, 12)
+            .frame(minHeight: 50)
             .background(Color.storSurface)
             .clipShape(.rect(cornerRadius: Radius.md, style: .continuous))
             .overlay {

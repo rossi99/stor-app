@@ -45,3 +45,17 @@ struct LabelledCard<Content: View>: View {
         .storCard(radius: radius)
     }
 }
+
+/// Keep amounts and labels readable when people choose accessibility text sizes.
+struct AdaptiveStack<Content: View>: View {
+    @Environment(\.dynamicTypeSize) private var typeSize
+    var spacing: CGFloat = Spacing.md
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        let layout = typeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: spacing))
+            : AnyLayout(HStackLayout(alignment: .center, spacing: spacing))
+        layout { content }
+    }
+}

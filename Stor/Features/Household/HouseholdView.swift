@@ -1,115 +1,94 @@
 import SwiftUI
 
-/// Who is in the household, how the money is set up, and a way back to setup.
 struct HouseholdView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.money) private var money
     @Environment(\.dismiss) private var dismiss
+    @State private var editor: Editor?
+
+    private enum Editor: String, Identifiable {
+        case contributions, accounts
+        var id: String { rawValue }
+        var title: String { self == .contributions ? "Monthly contributions" : "Linked accounts" }
+    }
 
     var body: some View {
+        @Bindable var state = appState
         VStack(spacing: 0) {
             BackHeader(title: "Household") { dismiss() }
-
-            ScrollView {
-                VStack(spacing: 14) {
-                    RowCard {
-                        ForEach(Array(appState.members.enumerated()), id: \.element.id) { index, member in
-                            memberRow(member, isFirst: index == 0)
+            Form {
+                Section("Your household") {
+                    ForEach(appState.members) { member in
+                        VStack(alignment: .leading, spacing: Spacing.xs) {
+                            Text(member.name).font(.headline)
+                            Text("\(money(member.contribution)) per month")
+                                .foregroundStyle(Color.storSecondaryLabel)
                         }
+                        .padding(.vertical, Spacing.xxs)
                     }
-
-                    RowCard {
-                        ForEach(Array(preferences.enumerated()), id: \.offset) { index, pref in
-                            preferenceRow(pref.label, pref.value, isFirst: index == 0)
-                        }
-                    }
-
-                    Button {
-                        appState.replaySetup()
-                    } label: {
-                        Text("Replay setup")
-                            .font(.text(14))
-                            .foregroundStyle(Color.storSecondaryLabel)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 48)
-                            .overlay {
-                                Capsule().strokeBorder(Color.storInk.opacity(0.14),
-                                                       lineWidth: Stroke.hairline)
-                            }
-                    }
-                    .buttonStyle(.plain)
                 }
-                .screenInset()
-                .padding(.top, Spacing.xxs)
-                .padding(.bottom, Spacing.xl)
+                Section("Shared spending") {
+                    DisclosureGroup("Two personal accounts + one joint pot") {
+                        Text("Personal spending has its own budget. Shared costs come out of the joint pot, funded by your monthly contributions.")
+                    }
+                    Button { editor = .contributions } label: {
+                        settingLink("Monthly contributions", value: money(appState.potContribution))
+                    }
+                    Button { editor = .accounts } label: {
+                        settingLink("Linked accounts", value: "\(appState.linkedAccounts.count)")
+                    }
+                    Picker("Planned top-up day", selection: $state.topUpDay) {
+                        ForEach(1...28, id: \.self) { day in Text("Day \(day)").tag(day) }
+                    }
+                }
+                Section {
+                    Picker("Display currency", selection: $state.currency) {
+                        ForEach(Currency.allCases, id: \.self) { currency in Text(currency.rawValue).tag(currency) }
+                    }
+                } footer: {
+                    Text("Changes the currency symbol used for these figures. Amounts are not converted between currencies.")
+                }
+                Section {
+                    Toggle("Hide balances", isOn: $state.privacyMode)
+                    Toggle("Payslip check in recap", isOn: $state.showPayslipCheck)
+                } footer: {
+                    Text("Hide balances and transaction amounts on screen. The payslip check appears in your monthly recap.")
+                }
             }
-            .scrollIndicators(.hidden)
+            .scrollContentBackground(.hidden)
         }
         .background(Color.storBackground)
         .navigationBarBackButtonHidden()
         .toolbar(.hidden, for: .navigationBar)
-    }
-
-    private var preferences: [(label: String, value: String)] {
-        [
-            ("Money model", appState.moneyModel.settingsLabel),
-            ("Currency", appState.currency.rawValue),
-            ("Personal privacy", "Totals only"),
-            ("Payslip check", appState.showPayslipCheck ? "On" : "Off"),
-            ("Pot top-up day", "10th"),
-        ]
-    }
-
-    private func memberRow(_ member: HouseholdMember, isFirst: Bool) -> some View {
-        VStack(spacing: 0) {
-            RowSeparator(isVisible: !isFirst)
-
-            HStack(spacing: 13) {
-                Text(member.initials)
-                    .font(.mono(12.5, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .frame(width: 38, height: 38)
-                    .background(member.ledger.accent)
-                    .clipShape(.circle)
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(member.name)
-                        .font(.text(15, weight: .medium))
-                        .tracking(-0.12)
-                        .foregroundStyle(Color.storInk)
-                    MonoText(member.role, size: 11, color: .storTertiaryLabel)
+        .sheet(item: $editor) { selected in
+            if selected == .contributions {
+                ContributionSettingsSheet(members: appState.members)
+            } else {
+                NavigationStack {
+                    ScrollView {
+                        LinkAccountsStep(showsHeading: false).padding(Spacing.screen)
+                    }
+                    .background(Color.storBackground)
+                    .navigationTitle(selected.title)
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) { Button("Done") { editor = nil } }
+                    }
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-                MonoText("\(money(member.contribution))/mo", size: 11,
-                         color: .storTertiaryLabel)
             }
-            .padding(15)
         }
     }
 
-    private func preferenceRow(_ label: String, _ value: String, isFirst: Bool) -> some View {
-        VStack(spacing: 0) {
-            RowSeparator(isVisible: !isFirst)
-
-            HStack(spacing: Spacing.md) {
-                Text(label)
-                    .font(.text(14.5))
-                    .tracking(-0.0725)
-                    .foregroundStyle(Color.storInk)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-
-                MonoText(value, size: 12, color: .storTertiaryLabel)
-
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(Color.storChevron)
+    private func settingLink(_ title: String, value: String) -> some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                Text(value).font(.subheadline).foregroundStyle(Color.storSecondaryLabel)
             }
-            .padding(15)
+            Spacer()
+            Image(systemName: "chevron.right").font(.footnote)
         }
+        .frame(minHeight: 44)
+        .foregroundStyle(Color.storInk)
     }
-}
-
-#Preview {
-    HouseholdView().environment(AppState())
 }

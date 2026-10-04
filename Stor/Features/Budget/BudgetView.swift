@@ -55,7 +55,7 @@ struct BudgetView: View {
     }
 
     private var totals: some View {
-        HStack(spacing: Spacing.sm + 2) {
+        AdaptiveStack(spacing: Spacing.sm + 2) {
             CompactStat(label: "Budgeted", value: money(appState.budgetedTotal))
             CompactStat(label: "Spent", value: money(appState.spentTotal))
             CompactStat(
@@ -68,9 +68,9 @@ struct BudgetView: View {
     }
 
     private var unbudgeted: some View {
-        HStack(alignment: .firstTextBaseline) {
+        AdaptiveStack(spacing: Spacing.sm) {
             Text(appState.ledger == .joint ? "Unbudgeted in the pot" : "Unspent, rolls over")
-                .font(.text(13))
+                .storText(13)
                 .foregroundStyle(Color.storSecondaryLabel)
             Spacer(minLength: Spacing.sm)
             MonoText(money(appState.ledger == .joint ? MockData.unbudgetedInPot : 0), size: 13)

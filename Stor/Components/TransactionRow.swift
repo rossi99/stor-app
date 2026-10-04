@@ -4,11 +4,11 @@ import SwiftUI
 struct MonogramChip: View {
     let text: String
     let ledger: Ledger
-    var size: CGFloat = 34
+    @ScaledMetric(relativeTo: .footnote) var size: CGFloat = 34
 
     var body: some View {
         Text(text)
-            .font(.mono(11, weight: .semibold))
+            .storMono(11, weight: .semibold)
             .foregroundStyle(ledger.accent)
             .frame(width: size, height: size)
             .background(ledger.soft)
@@ -30,17 +30,18 @@ struct TransactionRow: View {
         VStack(spacing: 0) {
             RowSeparator(isVisible: !isFirst)
 
-            HStack(spacing: 13) {
+            AdaptiveStack(spacing: 13) {
                 MonogramChip(text: transaction.monogram, ledger: transaction.ledger)
+                    .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(transaction.title)
-                        .font(.text(14.5))
+                        .storText(14.5)
                         .tracking(-0.116)
                         .foregroundStyle(Color.storInk)
-                        .lineLimit(1)
+                        .fixedSize(horizontal: false, vertical: true)
                     MonoText(transaction.subtitle, size: 11.5, color: .storTertiaryLabel)
-                        .lineLimit(1)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -55,6 +56,7 @@ struct TransactionRow: View {
             .padding(.vertical, 14)
         }
         .background(transaction.isNew ? Color.storAccentSoft : Color.storSurface)
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -68,20 +70,20 @@ struct CompactTransactionRow: View {
         VStack(spacing: 0) {
             RowSeparator(isVisible: !isFirst)
 
-            HStack(spacing: Spacing.md) {
+            AdaptiveStack(spacing: Spacing.md) {
                 Circle()
                     .fill(transaction.ledger.accent)
                     .frame(width: 8, height: 8)
 
                 VStack(alignment: .leading, spacing: 0) {
                     Text(transaction.title)
-                        .font(.text(14))
+                        .storText(14)
                         .tracking(-0.07)
                         .foregroundStyle(Color.storInk)
-                        .lineLimit(1)
+                        .fixedSize(horizontal: false, vertical: true)
                     MonoText("\(transaction.category) · \(transaction.tag)",
                              size: 11.5, color: .storTertiaryLabel)
-                        .lineLimit(1)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
 

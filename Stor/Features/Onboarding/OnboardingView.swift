@@ -5,31 +5,44 @@ import SwiftUI
 struct OnboardingView: View {
     @Environment(AppState.self) private var appState
 
+    @State private var contributions = ContributionDraft(members: [])
+    @State private var hasLoadedContributions = false
+
     var body: some View {
-        @Bindable var state = appState
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 0) {
+                stepIndicator
+                    .padding(.bottom, 38)
 
-        VStack(alignment: .leading, spacing: 0) {
-            stepIndicator
-                .padding(.bottom, 38)
+                ScrollView {
+                    Group {
+                        switch appState.onboardingStep {
+                        case 0:  MoneyModelStep()
+                        case 1:  LinkAccountsStep()
+                        default: FundPotStep(draft: $contributions)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                }
+                .scrollDismissesKeyboard(.interactively)
 
-            Group {
-                switch appState.onboardingStep {
-                case 0:  MoneyModelStep()
-                case 1:  LinkAccountsStep()
-                default: FundPotStep()
+                footer
+                    .padding(.top, Spacing.xxl - 2)
+            }
+            .padding(.horizontal, Spacing.xxl)
+            .padding(.top, Spacing.lg)
+            .padding(.bottom, Spacing.xl)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color.storBackground)
+            .toolbar(.hidden, for: .navigationBar)
+            .animation(.easeInOut(duration: 0.25), value: appState.onboardingStep)
+            .onAppear {
+                if !hasLoadedContributions {
+                    contributions = ContributionDraft(members: appState.members)
+                    hasLoadedContributions = true
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-
-            footer
-                .padding(.top, Spacing.xxl - 2)
         }
-        .padding(.horizontal, Spacing.xxl)
-        .padding(.top, Spacing.lg)
-        .padding(.bottom, Spacing.xl)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.storBackground)
-        .animation(.easeInOut(duration: 0.25), value: appState.onboardingStep)
     }
 
     private var stepIndicator: some View {
@@ -49,7 +62,7 @@ struct OnboardingView: View {
             Button(appState.onboardingStep > 0 ? "Back" : "Skip") {
                 appState.retreatOnboarding()
             }
-            .font(.mono(11.5))
+            .storMono(11.5)
             .tracking(1.15)
             .textCase(.uppercase)
             .foregroundStyle(Color.storSecondaryLabel)
@@ -57,8 +70,10 @@ struct OnboardingView: View {
             .buttonStyle(.plain)
 
             PrimaryButton(
-                title: appState.onboardingStep < 2 ? "Continue" : "Open the app"
+                title: appState.onboardingStep < 2 ? "Continue" : "Open the app",
+                isEnabled: appState.onboardingStep < 2 || contributions.isValid
             ) {
+                if appState.onboardingStep == 2 && !appState.saveContributions(contributions) { return }
                 appState.advanceOnboarding()
             }
         }
@@ -86,7 +101,7 @@ struct StepHeading: View {
                     .foregroundStyle(Color.storSecondaryLabel)
                     .fontWeight(.regular)
             }
-            .font(.display(40))
+            .storDisplay(40)
             .tracking(-0.6)
             .lineSpacing(-2)
             .padding(.bottom, Spacing.md)
@@ -97,7 +112,7 @@ struct StepHeading: View {
 extension View {
     /// Body copy on the onboarding ground.
     func onboardingBody() -> some View {
-        font(.text(14.5))
+        storText(16)
             .lineSpacing(4)
             .foregroundStyle(Color.storBodyInk)
     }

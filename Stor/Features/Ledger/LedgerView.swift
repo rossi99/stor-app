@@ -13,8 +13,12 @@ struct LedgerView: View {
 
         VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 14) {
-                ScreenTitle("Ledger")
-                    .screenInset()
+                HStack {
+                    ScreenTitle("Ledger")
+                    Spacer()
+                    AddSpendButton(ledger: appState.feedFilter)
+                }
+                .screenInset()
 
                 ChipRow(options: filters, selection: $state.feedFilter) { filter in
                     filter.map { appState.name(for: $0) } ?? "All"
@@ -24,17 +28,28 @@ struct LedgerView: View {
             .padding(.top, Spacing.md)
             .padding(.bottom, Spacing.md)
 
-            ScrollView {
-                LazyVStack(spacing: Spacing.lg + 2) {
-                    ForEach(appState.transactionGroups, id: \.label) { group in
-                        section(label: group.label, rows: group.rows)
-                    }
+            if appState.filteredTransactions.isEmpty {
+                ContentUnavailableView {
+                    Label("No transactions yet", systemImage: "list.bullet.rectangle")
+                } description: {
+                    Text(appState.feedFilter.map { "Spending paid from \(appState.name(for: $0)) will appear here." }
+                         ?? "Your spending will appear here once you add an expense.")
+                } actions: {
+                    AddSpendButton(ledger: appState.feedFilter)
                 }
-                .screenInset()
-                .padding(.top, Spacing.xxs)
-                .padding(.bottom, Spacing.xl)
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: Spacing.lg + 2) {
+                        ForEach(appState.transactionGroups, id: \.label) { group in
+                            section(label: group.label, rows: group.rows)
+                        }
+                    }
+                    .screenInset()
+                    .padding(.top, Spacing.xxs)
+                    .padding(.bottom, Spacing.xl)
+                }
+                .scrollIndicators(.hidden)
             }
-            .scrollIndicators(.hidden)
         }
         .background(Color.storBackground)
         .animation(.easeInOut(duration: 0.2), value: appState.feedFilter)

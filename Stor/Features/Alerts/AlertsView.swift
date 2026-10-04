@@ -40,13 +40,13 @@ struct AlertsView: View {
             .padding(.bottom, Spacing.sm)
 
             Text(alert.title)
-                .font(.text(15, weight: .semibold))
+                .storText(15, weight: .semibold)
                 .tracking(-0.15)
                 .foregroundStyle(Color.storInk)
                 .padding(.bottom, 5)
 
             Text(alert.body)
-                .font(.text(13))
+                .storText(13)
                 .lineSpacing(3)
                 .foregroundStyle(Color.storSecondaryLabel)
                 .multilineTextAlignment(.leading)

@@ -18,7 +18,7 @@ struct Envelope: Identifiable, Hashable, Sendable {
 
     /// Clamped so an overspent envelope shows a full bar rather than overflowing.
     var fraction: Double {
-        guard budget > 0 else { return 0 }
+        guard budget > 0 else { return spent > 0 ? 1 : 0 }
         return min(1, spent / budget)
     }
 

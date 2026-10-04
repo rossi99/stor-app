@@ -1,114 +1,117 @@
 import SwiftUI
 
-/// Step 3 — the standing order into the joint pot, and whether it clears the
-/// household's average shared outgoings.
+/// A shared editor for onboarding and household settings. Changes stay in the draft.
 struct FundPotStep: View {
     @Environment(AppState.self) private var appState
     @Environment(\.money) private var money
+    @Binding var draft: ContributionDraft
+    var showsHeading = true
+    @FocusState private var focusedLedger: Ledger?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            StepHeading(lead: "Fund the", trail: "joint pot", step: 3)
-
-            Text("Monthly transfer from each personal account. Everything shared is paid from here.")
+        VStack(alignment: .leading, spacing: Spacing.xl) {
+            if showsHeading { StepHeading(lead: "Fund the", trail: "joint pot", step: 3) }
+            Text("Monthly contribution from each personal account, in \(money.currency.rawValue). Tap an amount to edit it.")
                 .onboardingBody()
-                .padding(.bottom, Spacing.xxl)
 
             ForEach(appState.members) { member in
                 contributionCard(member)
-                    .padding(.bottom, member.ledger == .ana ? 14 : Spacing.xl - 2)
             }
-
             total
+        }
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Done") { focusedLedger = nil }
+            }
         }
     }
 
     private func contributionCard(_ member: HouseholdMember) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(member.firstName)
-                    .font(.text(14, weight: .semibold))
-                    .foregroundStyle(Color.storInk)
+        let entry = draft.entries[member.ledger] ?? ""
+        let amount = MoneyInput.amount(from: entry)
+        return VStack(alignment: .leading, spacing: Spacing.md) {
+            AdaptiveStack(spacing: Spacing.sm) {
+                Text(member.firstName).storText(17, weight: .semibold)
                 Spacer(minLength: Spacing.sm)
-                MonoText("\(member.contributionPercent)% of net pay", size: 11,
-                         color: .storTertiaryLabel)
-            }
-            .padding(.bottom, 14)
-
-            HStack(spacing: 14) {
-                stepButton("minus") {
-                    appState.adjustContribution(member.ledger, by: -50)
+                if let amount, member.netPay > 0 {
+                    MonoText("\(Int((amount / member.netPay * 100).rounded()))% of net pay", size: 13,
+                             color: .storSecondaryLabel)
                 }
+            }
+            TextField("0.00", text: Binding(
+                get: { draft.entries[member.ledger] ?? "" },
+                set: { draft.entries[member.ledger] = $0 }
+            ))
+            .keyboardType(.decimalPad)
+            .focused($focusedLedger, equals: member.ledger)
+            .storDisplay(30)
+            .padding(Spacing.md)
+            .frame(minHeight: 52)
+            .background(Color.storBackground, in: RoundedRectangle(cornerRadius: Radius.sm))
+            .accessibilityLabel("\(member.firstName)’s monthly contribution in \(money.currency.rawValue)")
+            .accessibilityIdentifier("contribution.\(member.ledger.rawValue)")
 
-                Text(money(member.contribution))
-                    .font(.display(32))
-                    .tracking(-0.32)
-                    .foregroundStyle(Color.storInk)
-                    .frame(maxWidth: .infinity)
-                    .minimumScaleFactor(0.6)
-                    .lineLimit(1)
+            if amount == nil && focusedLedger != member.ledger {
+                Text("Enter an amount from 0 to 999,999.99, with up to two decimal places.")
+                    .storText(14).foregroundStyle(Color.storNegative)
+            }
 
-                stepButton("plus") {
-                    appState.adjustContribution(member.ledger, by: 50)
+            HStack {
+                Text("Adjust by \(money(50))").storText(14).foregroundStyle(Color.storSecondaryLabel)
+                Spacer()
+                stepButton("minus", member: member, enabled: (amount ?? 0) > 0) {
+                    draft.adjust(member.ledger, by: -50)
+                }
+                stepButton("plus", member: member, enabled: amount != nil && amount! < MoneyInput.maximum) {
+                    draft.adjust(member.ledger, by: 50)
                 }
             }
         }
-        .padding(Spacing.lg + 2)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.storSurface)
-        .clipShape(.rect(cornerRadius: Radius.lg, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: Radius.lg, style: .continuous)
-                .strokeBorder(Color.storBorder, lineWidth: Stroke.hairline)
-        }
+        .foregroundStyle(Color.storInk)
+        .padding(Spacing.lg)
+        .storCard()
     }
 
-    private func stepButton(_ symbol: String, action: @escaping () -> Void) -> some View {
+    private func stepButton(_ symbol: String, member: HouseholdMember, enabled: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: symbol)
-                .font(.system(size: 15, weight: .regular))
-                .foregroundStyle(Color.storInk)
-                .frame(width: 38, height: 38)
-                .overlay {
-                    Circle().strokeBorder(Color.storBorder,
-                                          lineWidth: Stroke.hairline)
-                }
+                .font(.system(size: 17))
+                .frame(width: 44, height: 44)
+                .background(Color.storBackground, in: Circle())
         }
         .buttonStyle(.plain)
+        .disabled(!enabled)
+        .opacity(enabled ? 1 : 0.4)
+        .accessibilityLabel("\(symbol == "minus" ? "Decrease" : "Increase") \(member.firstName)’s contribution by \(money(50))")
     }
 
     private var total: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Rectangle()
-                .fill(Color.storBorder)
-                .frame(height: Stroke.hairline)
-                .padding(.bottom, Spacing.lg)
-
-            HStack(alignment: .firstTextBaseline) {
-                MonoLabel("Joint pot / month", size: 10.5,
-                          color: .storTertiaryLabel)
-                Spacer(minLength: Spacing.sm)
-                Text(money(appState.potContribution))
-                    .font(.display(26))
-                    .foregroundStyle(Color.storInk)
+        VStack(alignment: .leading, spacing: Spacing.sm) {
+            Divider()
+            if let amount = draft.total {
+                AdaptiveStack(spacing: Spacing.sm) {
+                    Text("Joint pot per month").storText(15, weight: .medium)
+                    Spacer()
+                    Text(money(amount)).storDisplay(26)
+                }
+                Text("Planned top-up: day \(appState.topUpDay) each month")
+                    .storText(14).foregroundStyle(Color.storSecondaryLabel)
+                Text(potNote(amount))
+                    .storText(14)
+                    .foregroundStyle(amount < MockData.averageSharedOutgoings ? Color.storNegative : Color.storSecondaryLabel)
+            } else {
+                Text("Check both amounts to see your monthly total.")
+                    .storText(15).foregroundStyle(Color.storSecondaryLabel)
             }
-
-            Text(potNote)
-                .font(.text(12.5))
-                .lineSpacing(2)
-                .foregroundStyle(appState.potFallsShort
-                                 ? Color.storNegative
-                                 : Color.storSecondaryLabel)
-                .padding(.top, Spacing.sm)
         }
     }
 
-    private var potNote: String {
+    private func potNote(_ amount: Double) -> String {
         let average = money(MockData.averageSharedOutgoings)
-        if appState.potFallsShort {
-            return "Below your average shared outgoings of \(average). The pot would run dry around the 24th."
+        if amount < MockData.averageSharedOutgoings {
+            return "Below your average shared outgoings of \(average). Add \(money(MockData.averageSharedOutgoings - amount)) per month to cover the gap."
         }
-        let headroom = money(appState.potContribution - MockData.averageSharedOutgoings)
-        return "Covers your average shared outgoings of \(average) with \(headroom) of headroom."
+        return "Covers your average shared outgoings of \(average) with \(money(amount - MockData.averageSharedOutgoings)) of headroom."
     }
 }

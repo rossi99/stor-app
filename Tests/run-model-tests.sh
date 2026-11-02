@@ -15,8 +15,8 @@ for path in sorted(pathlib.Path('Stor/Assets.xcassets').glob('*.colorset/Content
 lines.append('}')
 pathlib.Path(sys.argv[1]).write_text('\n'.join(lines))
 PY
-xcrun --sdk macosx swiftc -parse-as-library -target "$(uname -m)-apple-macosx14.0" \
+xcrun --sdk macosx swiftc -D DEBUG -parse-as-library -target "$(uname -m)-apple-macosx14.0" \
     -module-cache-path "$TEST_OUTPUT/ModuleCache" \
-    Stor/Models/*.swift Stor/Mock/*.swift Stor/AppState.swift Stor/DesignSystem/Formatters.swift \
+    Stor/Models/*.swift Stor/Data/*.swift Stor/Mock/*.swift Stor/AppState.swift Stor/DesignSystem/Formatters.swift \
     "$TEST_OUTPUT/AssetColors.swift" Tests/ModelRegressionTests.swift -o "$TEST_OUTPUT/model-tests"
 "$TEST_OUTPUT/model-tests"

@@ -25,7 +25,7 @@ struct ProgressTrack: View {
 
 /// The two-tone bar showing how a joint spend is apportioned.
 struct SplitTrack: View {
-    /// Ana's share, 0...1.
+    /// The first member's share, 0...1.
     let fraction: Double
     var height: CGFloat = TrackHeight.goal
 

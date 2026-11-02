@@ -12,7 +12,7 @@ enum NetWorthRange: String, CaseIterable, Identifiable, Sendable {
         case .oneMonth:  "this month"
         case .sixMonths: "in 6 months"
         case .oneYear:   "in 12 months"
-        case .all:       "since 2019"
+        case .all:       "all time"
         }
     }
 }

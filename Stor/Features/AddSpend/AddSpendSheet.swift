@@ -59,7 +59,7 @@ struct AddSpendSheet: View {
 
                     VStack(alignment: .leading, spacing: Spacing.sm) {
                         Text("Category").storText(15, weight: .medium)
-                        ChipRow(options: MockData.spendCategories, selection: $state.draft.category) { $0 }
+                        ChipRow(options: SpendDraft.categories, selection: $state.draft.category) { $0 }
                             .padding(.horizontal, -Spacing.screen)
                     }
 
@@ -133,7 +133,7 @@ struct AddSpendSheet: View {
     }
 
     private func accountName(_ ledger: Ledger) -> String {
-        ledger == .joint ? "Joint pot" : "\(appState.name(for: ledger))’s account"
+        ledger == .joint ? "Joint pot" : "\(appState.member(ledger).possessive) account"
     }
 
     private var splitCard: some View {
@@ -155,22 +155,22 @@ struct AddSpendSheet: View {
                 .storText(14).foregroundStyle(Color.storSecondaryLabel)
 
             AdaptiveStack(spacing: Spacing.sm) {
-                preset("\(appState.sam.firstName) only", share: 0)
+                preset("\(appState.partner.firstName) only", share: 0)
                 preset("Equal", share: 50)
-                preset("\(appState.ana.firstName) only", share: 100)
+                preset("\(appState.you.firstName) only", share: 100)
             }
 
             Stepper(value: $state.draft.splitPercent, in: 0...100) {
-                Text("\(appState.ana.firstName)’s share: \(appState.draft.splitPercent)%")
+                Text("\(appState.you.possessive) share: \(appState.draft.splitPercent)%")
                     .storText(15)
             }
             Slider(value: Binding(get: { Double(appState.draft.splitPercent) },
                                   set: { appState.draft.splitPercent = Int($0) }), in: 0...100, step: 1)
-                .accessibilityLabel("\(appState.ana.firstName)’s share")
+                .accessibilityLabel("\(appState.you.possessive) share")
                 .accessibilityValue("\(appState.draft.splitPercent) percent")
             VStack(alignment: .leading, spacing: Spacing.sm) {
-                Text("\(appState.ana.firstName): \(appState.draft.splitPercent)% · \(appState.draft.anaShare(money))")
-                Text("\(appState.sam.firstName): \(100 - appState.draft.splitPercent)% · \(appState.draft.samShare(money))")
+                Text("\(appState.you.firstName): \(appState.draft.splitPercent)% · \(appState.draft.yourShare(money))")
+                Text("\(appState.partner.firstName): \(100 - appState.draft.splitPercent)% · \(appState.draft.partnerShare(money))")
             }
             .storText(15)
         }
@@ -188,4 +188,6 @@ struct AddSpendSheet: View {
     }
 }
 
-#Preview { AddSpendSheet().environment(AppState()) }
+#if DEBUG
+#Preview { AddSpendSheet().environment(AppState.preview) }
+#endif

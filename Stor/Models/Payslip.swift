@@ -2,8 +2,8 @@ import Foundation
 
 /// Expected net = gross − income tax − National Insurance, checked against what
 /// actually landed. The discrepancy is the point of the whole screen.
-struct Payslip: Identifiable, Hashable, Sendable {
-    let id = UUID()
+struct Payslip: Identifiable, Hashable, Codable, Sendable {
+    var id = UUID().uuidString
     let ledger: Ledger
     let name: String
     let gross: Double

@@ -1,7 +1,7 @@
 import Foundation
 
 /// A finished month, reviewed on the Recap screen.
-struct MonthRecap: Identifiable, Hashable, Sendable {
+struct MonthRecap: Identifiable, Hashable, Codable, Sendable {
     /// Short month name — the id and the segment label both come from it.
     let month: String
     let year: Int
@@ -30,7 +30,7 @@ struct MonthRecap: Identifiable, Hashable, Sendable {
 }
 
 /// One category within a month's recap, with its month-on-month movement.
-struct RecapCategory: Identifiable, Hashable, Sendable {
+struct RecapCategory: Identifiable, Hashable, Codable, Sendable {
     let name: String
     let amount: Double
     /// Positive means it rose on the previous month.

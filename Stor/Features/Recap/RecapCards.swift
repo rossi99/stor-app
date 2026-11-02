@@ -3,6 +3,7 @@ import SwiftUI
 /// Where the month went. Bars are scaled against the largest category, not the
 /// total, so the smaller envelopes stay readable.
 struct RecapCategoriesCard: View {
+    let recap: MonthRecap
     @Environment(AppState.self) private var appState
     @Environment(\.money) private var money
 
@@ -11,7 +12,7 @@ struct RecapCategoriesCard: View {
             MonoLabel("Where it went · tap a row")
                 .padding(.bottom, 14)
 
-            ForEach(appState.recap.categories) { category in
+            ForEach(recap.categories) { category in
                 row(category)
             }
         }
@@ -24,7 +25,7 @@ struct RecapCategoriesCard: View {
 
     private func row(_ category: RecapCategory) -> some View {
         let isOpen = appState.expandedCategory == category.name
-        let peak = appState.recap.largestCategory
+        let peak = recap.largestCategory
 
         return Button {
             appState.toggleExpanded(category.name)
@@ -89,10 +90,11 @@ struct RecapCategoriesCard: View {
 /// Expected net against what actually landed. The kind of thing a spend tracker
 /// never catches.
 struct PayslipCheckCard: View {
+    @Environment(AppState.self) private var appState
     @Environment(\.money) private var money
 
     private var toReview: Int {
-        MockData.payslips.filter { !$0.isAsExpected }.count
+        appState.snapshot.payslips.filter { !$0.isAsExpected }.count
     }
 
     var body: some View {
@@ -113,7 +115,7 @@ struct PayslipCheckCard: View {
                 .foregroundStyle(Color.storSecondaryLabel)
                 .padding(.bottom, 14)
 
-            ForEach(MockData.payslips) { payslip in
+            ForEach(appState.snapshot.payslips) { payslip in
                 row(payslip)
             }
         }

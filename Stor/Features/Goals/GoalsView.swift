@@ -11,29 +11,39 @@ struct GoalsView: View {
                 .padding(.top, Spacing.md)
                 .padding(.bottom, 14)
 
+            if appState.goals.isEmpty && appState.snapshot.emergencyFund == nil {
+                ContentUnavailableView {
+                    Label("No shared goals yet", systemImage: "target")
+                } description: {
+                    Text("Goals you’re saving for together will show here, with what’s saved and when you’ll get there.")
+                }
+            } else {
             ScrollView {
                 VStack(spacing: Spacing.md) {
                     ForEach(appState.goals) { goal in
                         GoalCard(goal: goal)
                     }
 
-                    emergencyFund
+                    if let fund = appState.snapshot.emergencyFund {
+                        emergencyFund(fund)
+                    }
                 }
                 .screenInset()
                 .padding(.bottom, Spacing.xl)
             }
             .scrollIndicators(.hidden)
+            }
         }
         .background(Color.storBackground)
     }
 
-    private var emergencyFund: some View {
+    private func emergencyFund(_ fund: EmergencyFund) -> some View {
         AccentPanel {
             MonoLabel("Emergency fund", size: 9.5, tracking: 0.12,
                       color: .storAccent.opacity(0.7))
 
             AdaptiveStack(spacing: Spacing.sm) {
-                Text(String(format: "%.1f", MockData.emergencyFundMonths))
+                Text(String(format: "%.1f", fund.months))
                     .storDisplay(34)
                     .foregroundStyle(Color.storAccent)
                 Text("months of household outgoings")
@@ -42,7 +52,7 @@ struct GoalsView: View {
             }
             .padding(.top, Spacing.sm)
 
-            Text(MockData.emergencyFundNote)
+            Text(fund.note)
                 .storText(12.5)
                 .lineSpacing(2)
                 .foregroundStyle(Color.storAccent.opacity(0.75))
@@ -128,19 +138,18 @@ struct GoalCard: View {
         }
     }
 
-    /// "Ready Mar 2028 · 24 months", counted from September 2026.
+    /// "Ready Mar 2028 · 24 months", counted from today.
     private var eta: String {
         let months = goal.monthsToGo
         guard months < .max else { return "Paused" }
 
-        let names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
-                     "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-        let offset = 8 + months
-        let year = 2026 + offset / 12
-        return "Ready \(names[offset % 12]) \(year) · \(months) months"
+        let ready = MonthCalendar.format(appState.month.adding(months: months), "MMM yyyy")
+        return "Ready \(ready) · \(months) months"
     }
 }
 
+#if DEBUG
 #Preview {
-    GoalsView().environment(AppState())
+    GoalsView().environment(AppState.preview)
 }
+#endif

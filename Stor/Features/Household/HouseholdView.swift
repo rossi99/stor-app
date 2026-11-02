@@ -20,7 +20,7 @@ struct HouseholdView: View {
                 Section("Your household") {
                     ForEach(appState.members) { member in
                         VStack(alignment: .leading, spacing: Spacing.xs) {
-                            Text(member.name).font(.headline)
+                            Text(member.displayName).font(.headline)
                             Text("\(money(member.contribution)) per month")
                                 .foregroundStyle(Color.storSecondaryLabel)
                         }
@@ -35,7 +35,7 @@ struct HouseholdView: View {
                         settingLink("Monthly contributions", value: money(appState.potContribution))
                     }
                     Button { editor = .accounts } label: {
-                        settingLink("Linked accounts", value: "\(appState.linkedAccounts.count)")
+                        settingLink("Linked accounts", value: appState.linkedAccounts.isEmpty ? "None yet" : "\(appState.linkedAccounts.count)")
                     }
                     Picker("Planned top-up day", selection: $state.topUpDay) {
                         ForEach(1...28, id: \.self) { day in Text("Day \(day)").tag(day) }

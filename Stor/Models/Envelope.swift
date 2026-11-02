@@ -1,7 +1,7 @@
 import Foundation
 
 /// A named spending envelope for the current month.
-struct Envelope: Identifiable, Hashable, Sendable {
+struct Envelope: Identifiable, Hashable, Codable, Sendable {
     let name: String
     let spent: Double
     let budget: Double
@@ -9,6 +9,8 @@ struct Envelope: Identifiable, Hashable, Sendable {
     let detail: String
     /// Human read on whether the month is on track — "2% ahead", "over by 19%".
     let pace: String
+    /// Three-month average spend, shown when a row is expanded.
+    var threeMonthAverage: Double?
 
     var id: String { name }
 
@@ -26,7 +28,4 @@ struct Envelope: Identifiable, Hashable, Sendable {
     func rightLabel(_ money: MoneyFormatter) -> String {
         isOver ? "\(money(overspend)) over" : "\(money(remaining)) left"
     }
-
-    /// Three-month average budget, shown when a row is expanded.
-    var threeMonthAverage: Double { (budget * 0.92).rounded() }
 }

@@ -6,17 +6,28 @@ struct LinkAccountsStep: View {
 
     var showsHeading = true
 
+    private var accounts: [BankAccount] { appState.snapshot.linkableAccounts }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            if showsHeading { StepHeading(lead: "Link the accounts", trail: "that matter", step: 2) }
+            if showsHeading {
+                StepHeading(lead: accounts.isEmpty ? "Link accounts" : "Link the accounts",
+                            trail: accounts.isEmpty ? "later" : "that matter", step: 2)
+            }
 
-            Text("\(appState.linkedAccounts.count) of \(MockData.linkableAccounts.count) accounts linked. Personal accounts stay private unless you share them.")
-                .onboardingBody()
-                .padding(.bottom, 22)
+            if accounts.isEmpty {
+                Text(showsHeading ? "There are no accounts to link yet. You can carry on without them and set your shared plan first."
+                                 : "There are no accounts to link yet.")
+                    .onboardingBody()
+            } else {
+                Text("\(appState.linkedAccounts.count) of \(accounts.count) accounts linked. Personal accounts stay private unless you share them.")
+                    .onboardingBody()
+                    .padding(.bottom, 22)
+            }
 
             VStack {
                 VStack(spacing: Spacing.sm) {
-                    ForEach(MockData.linkableAccounts) { account in
+                    ForEach(accounts) { account in
                         accountRow(account)
                     }
                 }

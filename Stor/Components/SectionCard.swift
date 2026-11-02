@@ -24,6 +24,20 @@ struct RowSeparator: View {
     }
 }
 
+/// What a card says when it has nothing to show yet.
+struct EmptyCardNote: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .storText(14)
+            .lineSpacing(2)
+            .foregroundStyle(Color.storSecondaryLabel)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.bottom, Spacing.sm)
+    }
+}
+
 /// A padded card with a mono header and free-form content beneath it.
 struct LabelledCard<Content: View>: View {
     let label: String

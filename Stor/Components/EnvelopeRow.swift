@@ -41,8 +41,8 @@ struct EnvelopeDetailRow: View {
 
     /// Expanding a row swaps in the three-month average alongside the detail.
     private var detailLine: String {
-        guard isExpanded else { return envelope.detail }
-        return "\(envelope.detail) · avg 3mo \(money(envelope.threeMonthAverage))"
+        guard isExpanded, let average = envelope.threeMonthAverage else { return envelope.detail }
+        return "\(envelope.detail) · avg 3mo \(money(average))"
     }
 
     var body: some View {

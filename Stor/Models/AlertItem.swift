@@ -1,20 +1,26 @@
 import Foundation
 
 /// A notification on the Alerts screen.
-struct AlertItem: Identifiable, Hashable, Sendable {
-    enum Kind: String, Sendable {
-        case envelope = "Envelope"
-        case payslip  = "Payslip"
-        case jointPot = "Joint pot"
-        case goal     = "Goal"
+struct AlertItem: Identifiable, Hashable, Codable, Sendable {
+    enum Kind: String, Codable, Sendable {
+        case envelope, payslip, jointPot, goal
+
+        var label: String {
+            switch self {
+            case .envelope: "Envelope"
+            case .payslip:  "Payslip"
+            case .jointPot: "Joint pot"
+            case .goal:     "Goal"
+            }
+        }
     }
 
     /// Whether the alert needs attention or is simply good news.
-    enum Tone: Sendable { case attention, positive }
+    enum Tone: String, Codable, Sendable { case attention, positive }
 
-    let id = UUID()
+    var id = UUID().uuidString
     let kind: Kind
-    let when: String
+    let date: Date
     let title: String
     let body: String
     let tone: Tone

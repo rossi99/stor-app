@@ -6,11 +6,47 @@ struct HeroCard: View {
     let model: SafeToSpend
     let accent: Color
     let daysLeft: Int
+    /// Offered instead of the calculation while there is nothing to calculate.
+    var onSetUp: (() -> Void)?
     @Environment(\.money) private var money
 
     @State private var showsCalculation = false
 
     var body: some View {
+        if model.isEmpty { emptySummary } else { calculation }
+    }
+
+    @ViewBuilder private var emptySummary: some View {
+        if let onSetUp {
+            Button(action: onSetUp) { emptyContent }
+                .buttonStyle(.plain)
+        } else {
+            emptyContent
+        }
+    }
+
+    private var emptyContent: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            MonoLabel(model.label, size: 10.5, color: .storBackground.opacity(0.62))
+            Text(model.caption)
+                .storDisplay(22)
+                .lineSpacing(2)
+                .multilineTextAlignment(.leading)
+                .foregroundStyle(Color.storBackground)
+                .padding(.top, 14)
+            if onSetUp != nil {
+                Label("Set contributions", systemImage: "chevron.right")
+                    .storText(14, weight: .medium)
+                    .foregroundStyle(Color.storBackground)
+                    .padding(.top, Spacing.md)
+            }
+        }
+        .padding(22)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .storSolidCard(radius: Radius.xxl, fill: accent)
+    }
+
+    private var calculation: some View {
         Button { showsCalculation = true } label: { summary }
             .buttonStyle(.plain)
             .accessibilityHint("Shows how your safe-to-spend amount is calculated")

@@ -11,36 +11,44 @@ struct RecapView: View {
         VStack(spacing: 0) {
             BackHeader(title: "Monthly recap") { dismiss() }
 
+            if let recap = appState.recap {
             ScrollView {
                 VStack(spacing: Spacing.md) {
-                    monthPicker
-                    summaryCard
-                    RecapCategoriesCard()
+                    monthPicker(selected: recap)
+                    summaryCard(recap)
+                    RecapCategoriesCard(recap: recap)
 
-                    if appState.showPayslipCheck {
+                    if appState.showPayslipCheck && !appState.snapshot.payslips.isEmpty {
                         PayslipCheckCard()
                     }
 
-                    TakeawayCard(label: "One thing", text: appState.recap.takeaway)
+                    TakeawayCard(label: "One thing", text: recap.takeaway)
                 }
                 .screenInset()
                 .padding(.top, Spacing.xxs)
                 .padding(.bottom, Spacing.xl)
             }
             .scrollIndicators(.hidden)
+            } else {
+                ContentUnavailableView {
+                    Label("No recaps yet", systemImage: "calendar")
+                } description: {
+                    Text("Your first recap will show here once you’ve finished a full month.")
+                }
+            }
         }
         .background(Color.storBackground)
         .navigationBarBackButtonHidden()
         .toolbar(.hidden, for: .navigationBar)
     }
 
-    private var monthPicker: some View {
+    private func monthPicker(selected: MonthRecap) -> some View {
         HStack(spacing: Spacing.xs) {
-            ForEach(MockData.recaps) { recap in
-                let isOn = appState.recapMonth == recap.month
+            ForEach(appState.snapshot.recaps) { recap in
+                let isOn = selected.id == recap.id
 
                 Button {
-                    appState.recapMonth = recap.month
+                    appState.selectedRecapID = recap.id
                     appState.expandedCategory = nil
                 } label: {
                     Text(recap.id)
@@ -57,10 +65,8 @@ struct RecapView: View {
         }
     }
 
-    private var summaryCard: some View {
-        let recap = appState.recap
-
-        return VStack(alignment: .leading, spacing: 0) {
+    private func summaryCard(_ recap: MonthRecap) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
             MonoLabel("\(recap.id) · household spend", size: 10,
                       color: .storBackground.opacity(0.6))
 
@@ -111,6 +117,8 @@ struct RecapView: View {
     }
 }
 
+#if DEBUG
 #Preview {
-    RecapView().environment(AppState())
+    RecapView().environment(AppState.preview)
 }
+#endif

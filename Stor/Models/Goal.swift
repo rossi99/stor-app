@@ -1,7 +1,7 @@
 import Foundation
 
 /// A shared savings goal with an adjustable monthly contribution.
-struct Goal: Identifiable, Hashable, Sendable {
+struct Goal: Identifiable, Hashable, Codable, Sendable {
     let id: String
     let name: String
     let saved: Double

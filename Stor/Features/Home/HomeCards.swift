@@ -12,8 +12,11 @@ struct EnvelopeSummaryCard: View {
             ) {
                 appState.selectedTab = .budget
             }
-            .padding(.bottom, 14)
+            .padding(.bottom, appState.homeEnvelopes.isEmpty ? Spacing.xxs : 14)
 
+            if appState.homeEnvelopes.isEmpty {
+                EmptyCardNote(text: "No envelopes yet. Spending you add will show here by category.")
+            }
             ForEach(appState.homeEnvelopes) { envelope in
                 EnvelopeSummaryRow(envelope: envelope, accent: appState.ledger.accent)
             }
@@ -28,18 +31,34 @@ struct EnvelopeSummaryCard: View {
 
 /// The three bills nearest to leaving the pot.
 struct BillsPreviewCard: View {
+    @Environment(AppState.self) private var appState
     @Environment(\.money) private var money
 
     private var upcoming: [Bill] {
-        Array(MockData.bills.prefix(3))
+        Array(appState.upcomingBills.prefix(3))
+    }
+
+    private var trailing: String {
+        let total = upcoming.reduce(0) { $0 + $1.amount }
+        return "\(money(total)) by \(MonthCalendar.format(upcoming.last?.dueDate ?? appState.month.date, "d MMM"))"
     }
 
     var body: some View {
+        if upcoming.isEmpty {
+            LabelledCard(label: "Upcoming shared bills") {
+                EmptyCardNote(text: "No bills due. Shared bills will show here before they leave the pot.")
+            }
+        } else {
+            billsCard
+        }
+    }
+
+    private var billsCard: some View {
         NavigationLink(value: Route.bills) {
             VStack(alignment: .leading, spacing: 0) {
                 CardHeader(
                     label: "Upcoming shared bills",
-                    trailingText: "\(money(MockData.committedRemaining)) by 22 Sep"
+                    trailingText: trailing
                 )
                 .padding(.bottom, 13)
 
@@ -58,7 +77,7 @@ struct BillsPreviewCard: View {
 
     private func billTile(_ bill: Bill) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            MonoLabel(weekdayLabel(for: bill.day), size: 10, tracking: 0.06,
+            MonoLabel(MonthCalendar.format(bill.dueDate, "EEE d").uppercased(), size: 10, tracking: 0.06,
                       color: .storTertiaryLabel)
 
             Text(money(bill.amount))
@@ -80,12 +99,6 @@ struct BillsPreviewCard: View {
         .background(Color.storBackground)
         .clipShape(.rect(cornerRadius: Radius.sm, style: .continuous))
     }
-
-    /// September 2026 starts on a Tuesday, so day-of-week follows from the date.
-    private func weekdayLabel(for day: Int) -> String {
-        let names = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]
-        return "\(names[(MockData.monthStartOffset + day - 1) % 7]) \(day)"
-    }
 }
 
 /// The three most recent movements across every ledger.
@@ -99,6 +112,9 @@ struct LatestCard: View {
             }
             .padding(.bottom, Spacing.xs)
 
+            if appState.allTransactions.isEmpty {
+                EmptyCardNote(text: "Nothing yet. Add your first spend and it will show here.")
+            }
             ForEach(Array(appState.allTransactions.prefix(3).enumerated()), id: \.element.id) { index, tx in
                 CompactTransactionRow(transaction: tx, isFirst: index == 0)
             }

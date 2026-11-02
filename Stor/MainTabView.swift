@@ -41,4 +41,6 @@ private extension View {
     }
 }
 
-#Preview { MainTabView().environment(AppState()) }
+#if DEBUG
+#Preview { MainTabView().environment(AppState.preview) }
+#endif

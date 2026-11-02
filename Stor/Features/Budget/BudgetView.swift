@@ -10,7 +10,7 @@ struct BudgetView: View {
 
         VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 14) {
-                ScreenTitle("September envelopes")
+                ScreenTitle("\(appState.month.monthName) envelopes")
 
                 SegmentedPill(
                     options: Ledger.displayOrder,
@@ -24,6 +24,15 @@ struct BudgetView: View {
             .padding(.top, Spacing.md)
             .padding(.bottom, Spacing.md)
 
+            if appState.envelopes.isEmpty {
+                ContentUnavailableView {
+                    Label("No envelopes yet", systemImage: "chart.pie")
+                } description: {
+                    Text("Spending you add to \(appState.name(for: appState.ledger)) will show here by category.")
+                } actions: {
+                    AddSpendButton(ledger: appState.ledger)
+                }
+            } else {
             ScrollView {
                 VStack(spacing: 0) {
                     totals
@@ -50,6 +59,7 @@ struct BudgetView: View {
                 .padding(.bottom, Spacing.xl)
             }
             .scrollIndicators(.hidden)
+            }
         }
         .background(Color.storBackground)
     }
@@ -73,13 +83,15 @@ struct BudgetView: View {
                 .storText(13)
                 .foregroundStyle(Color.storSecondaryLabel)
             Spacer(minLength: Spacing.sm)
-            MonoText(money(appState.ledger == .joint ? MockData.unbudgetedInPot : 0), size: 13)
+            MonoText(money(appState.unbudgetedTotal), size: 13)
         }
         .padding(.horizontal, Spacing.xxs)
         .padding(.top, Spacing.lg)
     }
 }
 
+#if DEBUG
 #Preview {
-    BudgetView().environment(AppState())
+    BudgetView().environment(AppState.preview)
 }
+#endif

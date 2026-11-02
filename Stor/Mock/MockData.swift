@@ -1,76 +1,88 @@
+#if DEBUG
 import Foundation
 
-/// Fixtures for the Whitfield–Okonkwo household: Ana and Sam, no kids, GBP.
-/// Two salaries paid on the 10th; the joint pot is funded by standing order
-/// rather than by splitting each purchase after the fact.
+/// Debug-only fixtures for the Whitfield–Okonkwo household: Ana and Sam, no kids,
+/// GBP. Dates are relative to now so populated screens stay coherent.
 enum MockData {
+
+    static var snapshot: HouseholdSnapshot {
+        HouseholdSnapshot(
+            name: "Whitfield–Okonkwo",
+            members: members,
+            topUpDay: 10,
+            averageSharedOutgoings: 3228,
+            ledgers: [
+                LedgerSummary(ledger: .joint, available: 180, spent: 2964, committed: 392,
+                              unbudgeted: 172, envelopes: envelopes(for: .joint)),
+                LedgerSummary(ledger: .you, available: 700, spent: 383, committed: 0,
+                              unbudgeted: 0, envelopes: envelopes(for: .you)),
+                LedgerSummary(ledger: .partner, available: 700, spent: 512, committed: 0,
+                              unbudgeted: 0, envelopes: envelopes(for: .partner)),
+            ],
+            transactions: transactions,
+            goals: goals,
+            emergencyFund: EmergencyFund(months: 4.2, note: "Target is 6 months. At £600/mo you reach it in about 14 months."),
+            bills: bills,
+            netWorth: netWorth,
+            accountGroups: accountGroups,
+            recaps: recaps,
+            payslips: payslips,
+            alerts: alerts,
+            linkableAccounts: linkableAccounts,
+            linkedAccountIDs: ["monzo", "starling", "lloyds"]
+        )
+    }
+
+    static func daysFromNow(_ days: Int) -> Date {
+        MonthCalendar(date: Date()).adding(days: days)
+    }
 
     // MARK: - People
 
     static let members: [HouseholdMember] = [
-        HouseholdMember(ledger: .ana, name: "Ana Whitfield", initials: "AW",
+        HouseholdMember(ledger: .you, name: "Ana Whitfield", initials: "AW",
                         role: "Owner · sees joint + own", netPay: 3341, contribution: 1950),
-        HouseholdMember(ledger: .sam, name: "Sam Okonkwo", initials: "SO",
+        HouseholdMember(ledger: .partner, name: "Sam Okonkwo", initials: "SO",
                         role: "Member · sees joint + own", netPay: 2605, contribution: 1450),
     ]
-
-    static let householdName = "Whitfield–Okonkwo"
-    static let today = "Mon 14 Sep"
-    static let todayDay = 14
-    static let daysLeftInMonth = 17
-    static let referenceDate = Calendar(identifier: .gregorian)
-        .date(from: DateComponents(year: 2026, month: 9, day: todayDay))!
-    static var monthStartOffset: Int {
-        let calendar = Calendar(identifier: .gregorian)
-        let start = calendar.date(from: calendar.dateComponents([.year, .month], from: referenceDate))!
-        return (calendar.component(.weekday, from: start) + 5) % 7
-    }
-
-    /// Average monthly shared outgoings — the bar the joint pot has to clear.
-    static let averageSharedOutgoings: Double = 3228
 
     // MARK: - Setup
 
     static let linkableAccounts: [BankAccount] = [
-        BankAccount(id: "monzo",    name: "Monzo Current",    owner: "Ana",   ledger: .ana,   initial: "M"),
-        BankAccount(id: "vanguard", name: "Vanguard ISA",     owner: "Ana",   ledger: .ana,   initial: "V"),
-        BankAccount(id: "starling", name: "Starling Joint",   owner: "Joint", ledger: .joint, initial: "S"),
-        BankAccount(id: "chase",    name: "Chase Saver",      owner: "Joint", ledger: .joint, initial: "C"),
-        BankAccount(id: "lloyds",   name: "Lloyds Current",   owner: "Sam",   ledger: .sam,   initial: "L"),
-        BankAccount(id: "halifax",  name: "Halifax Mortgage", owner: "Joint", ledger: .joint, initial: "H"),
+        BankAccount(id: "monzo",    name: "Monzo Current",    owner: "Ana",   ledger: .you,     initial: "M"),
+        BankAccount(id: "vanguard", name: "Vanguard ISA",     owner: "Ana",   ledger: .you,     initial: "V"),
+        BankAccount(id: "starling", name: "Starling Joint",   owner: "Joint", ledger: .joint,   initial: "S"),
+        BankAccount(id: "chase",    name: "Chase Saver",      owner: "Joint", ledger: .joint,   initial: "C"),
+        BankAccount(id: "lloyds",   name: "Lloyds Current",   owner: "Sam",   ledger: .partner, initial: "L"),
+        BankAccount(id: "halifax",  name: "Halifax Mortgage", owner: "Joint", ledger: .joint,   initial: "H"),
     ]
-
-    static let defaultLinkedAccounts: Set<String> = ["monzo", "starling", "lloyds"]
-
-    /// Identities that already have an account. Ana's Google address is seeded
-    /// so the provider flow demonstrates both halves of the upsert.
-    static let knownAccounts: Set<String> = ["ana.whitfield@gmail.com"]
 
     // MARK: - Envelopes
 
     static func envelopes(for ledger: Ledger) -> [Envelope] {
+        let envelopes: [Envelope]
         switch ledger {
         case .joint:
-            [
-                Envelope(name: "Rent & mortgage", spent: 1420, budget: 1420, detail: "Paid 1 Sep",        pace: "on plan"),
+            envelopes = [
+                Envelope(name: "Rent & mortgage", spent: 1420, budget: 1420, detail: "Paid on the 1st",   pace: "on plan"),
                 Envelope(name: "Groceries",       spent:  412, budget:  520, detail: "11 shops",          pace: "2% ahead"),
                 Envelope(name: "Energy & water",  spent:  188, budget:  210, detail: "2 direct debits",   pace: "on plan"),
                 Envelope(name: "Transport",       spent:   96, budget:  160, detail: "TfL + fuel",        pace: "18% under"),
                 Envelope(name: "Eating out",      spent:  143, budget:  120, detail: "6 outings",         pace: "over by 19%"),
                 Envelope(name: "Home & repairs",  spent:   58, budget:  150, detail: "Screwfix, filters", pace: "61% left"),
                 Envelope(name: "Subscriptions",   spent:   47, budget:   48, detail: "7 active",          pace: "on plan"),
-                Envelope(name: "Savings transfer", spent: 600, budget:  600, detail: "Auto, 30 Sep",      pace: "on plan"),
+                Envelope(name: "Savings transfer", spent: 600, budget:  600, detail: "Auto, month end",   pace: "on plan"),
             ]
-        case .ana:
-            [
+        case .you:
+            envelopes = [
                 Envelope(name: "Clothes",         spent: 118, budget: 150, detail: "3 orders",       pace: "21% left"),
                 Envelope(name: "Coffee & lunch",  spent:  86, budget:  90, detail: "19 taps",        pace: "tight"),
                 Envelope(name: "Hobbies",         spent:  64, budget: 200, detail: "Pottery studio", pace: "68% left"),
                 Envelope(name: "Gifts",           spent:  35, budget:  60, detail: "Sam's mum",      pace: "42% left"),
                 Envelope(name: "Unallocated",     spent:  80, budget: 200, detail: "No envelope",    pace: "—"),
             ]
-        case .sam:
-            [
+        case .partner:
+            envelopes = [
                 Envelope(name: "Cycling",         spent: 214, budget: 180, detail: "New wheelset", pace: "over by 19%"),
                 Envelope(name: "Coffee & lunch",  spent: 102, budget:  90, detail: "24 taps",      pace: "over by 13%"),
                 Envelope(name: "Games",           spent:  76, budget:  80, detail: "2 titles",     pace: "tight"),
@@ -78,38 +90,40 @@ enum MockData {
                 Envelope(name: "Unallocated",     spent:  90, budget: 310, detail: "No envelope",  pace: "—"),
             ]
         }
+        return envelopes.map {
+            Envelope(name: $0.name, spent: $0.spent, budget: $0.budget, detail: $0.detail, pace: $0.pace,
+                     threeMonthAverage: ($0.budget * 0.92).rounded())
+        }
     }
 
     // MARK: - Ledger
 
-    static let transactions: [Transaction] = [
-        Transaction(group: "Today · Mon 14 Sep", title: "Sainsbury's", category: "Groceries",
-                    amount: -46.20, actor: .ana, ledger: .joint, tag: "Joint", monogram: "SB"),
-        Transaction(group: "Today · Mon 14 Sep", title: "TfL travel", category: "Transport",
-                    amount: -6.80, actor: .sam, ledger: .joint, tag: "Joint", monogram: "TF"),
-        Transaction(group: "Sun 13 Sep", title: "The Bell", category: "Eating out",
-                    amount: -38.50, actor: .sam, ledger: .joint, tag: "50/50", monogram: "BE"),
-        Transaction(group: "Sun 13 Sep", title: "Boots", category: "Health",
-                    amount: -12.40, actor: .ana, ledger: .ana, tag: "Ana", monogram: "BO"),
-        Transaction(group: "Sat 12 Sep", title: "Ocado", category: "Groceries",
-                    amount: -74.15, actor: .ana, ledger: .joint, tag: "Joint", monogram: "OC"),
-        Transaction(group: "Sat 12 Sep", title: "Screwfix", category: "Home & repairs",
-                    amount: -21.90, actor: .sam, ledger: .joint, tag: "60/40", monogram: "SX"),
-        Transaction(group: "Sat 12 Sep", title: "Ozone Coffee", category: "Coffee & lunch",
-                    amount: -3.60, actor: .ana, ledger: .ana, tag: "Ana", monogram: "OZ"),
-        Transaction(group: "Fri 11 Sep", title: "Octopus Energy", category: "Energy & water",
-                    amount: -142, actor: nil, ledger: .joint, tag: "DD", monogram: "OE"),
-        Transaction(group: "Fri 11 Sep", title: "Deliveroo", category: "Eating out",
-                    amount: -29.40, actor: .sam, ledger: .joint, tag: "50/50", monogram: "DL"),
-        Transaction(group: "Thu 10 Sep", title: "Transfer to joint pot", category: "Contribution",
-                    amount: -1950, actor: .ana, ledger: .ana, tag: "Ana", monogram: "→"),
-        Transaction(group: "Thu 10 Sep", title: "Salary · Kite Studio", category: "Income",
-                    amount: 3341.28, actor: .ana, ledger: .ana, tag: "Ana", monogram: "£"),
-    ]
-
-    static let spendCategories = [
-        "Groceries", "Eating out", "Transport", "Home & repairs", "Health", "Other",
-    ]
+    static var transactions: [Transaction] {
+        [
+            Transaction(date: daysFromNow(0), title: "Sainsbury's", category: "Groceries",
+                        amount: -46.20, actor: .you, actorName: "Ana", ledger: .joint, tag: "Joint", monogram: "SB"),
+            Transaction(date: daysFromNow(0), title: "TfL travel", category: "Transport",
+                        amount: -6.80, actor: .partner, actorName: "Sam", ledger: .joint, tag: "Joint", monogram: "TF"),
+            Transaction(date: daysFromNow(-1), title: "The Bell", category: "Eating out",
+                        amount: -38.50, actor: .partner, actorName: "Sam", ledger: .joint, tag: "50/50", monogram: "BE"),
+            Transaction(date: daysFromNow(-1), title: "Boots", category: "Health",
+                        amount: -12.40, actor: .you, actorName: "Ana", ledger: .you, tag: "Ana", monogram: "BO"),
+            Transaction(date: daysFromNow(-2), title: "Ocado", category: "Groceries",
+                        amount: -74.15, actor: .you, actorName: "Ana", ledger: .joint, tag: "Joint", monogram: "OC"),
+            Transaction(date: daysFromNow(-2), title: "Screwfix", category: "Home & repairs",
+                        amount: -21.90, actor: .partner, actorName: "Sam", ledger: .joint, tag: "60/40", monogram: "SX"),
+            Transaction(date: daysFromNow(-2), title: "Ozone Coffee", category: "Coffee & lunch",
+                        amount: -3.60, actor: .you, actorName: "Ana", ledger: .you, tag: "Ana", monogram: "OZ"),
+            Transaction(date: daysFromNow(-3), title: "Octopus Energy", category: "Energy & water",
+                        amount: -142, actor: nil, actorName: nil, ledger: .joint, tag: "DD", monogram: "OE"),
+            Transaction(date: daysFromNow(-3), title: "Deliveroo", category: "Eating out",
+                        amount: -29.40, actor: .partner, actorName: "Sam", ledger: .joint, tag: "50/50", monogram: "DL"),
+            Transaction(date: daysFromNow(-4), title: "Transfer to joint pot", category: "Contribution",
+                        amount: -1950, actor: .you, actorName: "Ana", ledger: .you, tag: "Ana", monogram: "→"),
+            Transaction(date: daysFromNow(-4), title: "Salary · Kite Studio", category: "Income",
+                        amount: 3341.28, actor: .you, actorName: "Ana", ledger: .you, tag: "Ana", monogram: "£"),
+        ]
+    }
 
     // MARK: - Goals
 
@@ -119,8 +133,5 @@ enum MockData {
         Goal(id: "japan", name: "Japan, spring", saved: 2340, target: 6000, monthly: 150,
              note: "Split 50/50 from personal allowances, not the pot."),
     ]
-
-    static let emergencyFundMonths = 4.2
-    static let emergencyFundNote =
-        "Target is 6 months. At £600/mo you reach it in November 2027."
 }
+#endif

@@ -99,7 +99,7 @@ struct FundPotStep: View {
                     .storText(14).foregroundStyle(Color.storSecondaryLabel)
                 Text(potNote(amount))
                     .storText(14)
-                    .foregroundStyle(amount < MockData.averageSharedOutgoings ? Color.storNegative : Color.storSecondaryLabel)
+                    .foregroundStyle(amount < (appState.snapshot.averageSharedOutgoings ?? 0) ? Color.storNegative : Color.storSecondaryLabel)
             } else {
                 Text("Check both amounts to see your monthly total.")
                     .storText(15).foregroundStyle(Color.storSecondaryLabel)
@@ -108,10 +108,13 @@ struct FundPotStep: View {
     }
 
     private func potNote(_ amount: Double) -> String {
-        let average = money(MockData.averageSharedOutgoings)
-        if amount < MockData.averageSharedOutgoings {
-            return "Below your average shared outgoings of \(average). Add \(money(MockData.averageSharedOutgoings - amount)) per month to cover the gap."
+        guard let outgoings = appState.snapshot.averageSharedOutgoings else {
+            return "You can change this at any time."
         }
-        return "Covers your average shared outgoings of \(average) with \(money(amount - MockData.averageSharedOutgoings)) of headroom."
+        let average = money(outgoings)
+        if amount < outgoings {
+            return "Below your average shared outgoings of \(average). Add \(money(outgoings - amount)) per month to cover the gap."
+        }
+        return "Covers your average shared outgoings of \(average) with \(money(amount - outgoings)) of headroom."
     }
 }

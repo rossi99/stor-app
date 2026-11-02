@@ -4,14 +4,17 @@ import Foundation
 struct SpendDraft {
     /// Raw decimal input, kept as a string so a trailing separator survives typing.
     var entry: String = ""
-    var paidBy: Ledger = .ana
+    var paidBy: Ledger = .you
     var merchant = ""
-    var category: String = MockData.spendCategories[0]
+    var category: String = SpendDraft.categories[0]
     var ledger: Ledger = .joint
-    /// Ana's share as a percentage, when the spend settles against the joint pot.
+    /// Your share as a percentage, when the spend settles against the joint pot.
     var splitPercent: Int = 50
 
     static let splitPresets = [0, 50, 100]
+
+    /// Product defaults, so a new household can add a spend before any budget exists.
+    static let categories = ["Groceries", "Eating out", "Transport", "Home & repairs", "Health", "Other"]
 
     /// Accept either decimal separator, up to six whole digits and two pennies.
     /// Invalid pasted input stays visible in the field, but cannot be committed.
@@ -20,8 +23,8 @@ struct SpendDraft {
         !entry.isEmpty || !merchant.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
     var isValid: Bool { amount > 0 && (0...100).contains(splitPercent) }
-    var anaAmount: Double { (amount * Double(splitPercent)).rounded() / 100 }
-    var samAmount: Double { (amount * 100 - anaAmount * 100).rounded() / 100 }
+    var yourAmount: Double { (amount * Double(splitPercent)).rounded() / 100 }
+    var partnerAmount: Double { (amount * 100 - yourAmount * 100).rounded() / 100 }
 
     /// Shows a placeholder zero until the first key lands.
     func display(_ money: MoneyFormatter) -> String {
@@ -30,33 +33,28 @@ struct SpendDraft {
 
     var showsSplit: Bool { ledger == .joint }
 
-    func anaShare(_ money: MoneyFormatter) -> String {
-        money(anaAmount, decimals: 2)
+    func yourShare(_ money: MoneyFormatter) -> String {
+        money(yourAmount, decimals: 2)
     }
 
-    func samShare(_ money: MoneyFormatter) -> String {
-        money(samAmount, decimals: 2)
+    func partnerShare(_ money: MoneyFormatter) -> String {
+        money(partnerAmount, decimals: 2)
     }
 
-    /// "60/40" for a joint spend, otherwise the owner's name.
-    var tag: String {
-        switch ledger {
-        case .joint: "\(splitPercent)/\(100 - splitPercent)"
-        case .ana:   "Ana"
-        case .sam:   "Sam"
-        }
-    }
-
-    func asTransaction() -> Transaction {
-        Transaction(
-            group: "Today · \(MockData.today)",
+    /// `name` resolves a ledger to its display name, for the tag and subtitle.
+    func asTransaction(date: Date = Date(), name: (Ledger) -> String = \.defaultName) -> Transaction {
+        let actor = ledger == .joint ? paidBy : ledger
+        return Transaction(
+            date: date,
             title: merchant.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 ? "Card payment · \(category)" : merchant.trimmingCharacters(in: .whitespacesAndNewlines),
             category: category,
             amount: -amount,
-            actor: ledger == .joint ? paidBy : ledger,
+            actor: actor,
+            actorName: name(actor),
             ledger: ledger,
-            tag: tag,
+            tag: ledger == .joint ? "\(splitPercent)/\(100 - splitPercent)" : name(ledger),
+            splitPercent: ledger == .joint ? splitPercent : nil,
             monogram: "✦",
             isNew: true
         )

@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// A linkable account offered during setup.
-struct BankAccount: Identifiable, Hashable, Sendable {
+struct BankAccount: Identifiable, Hashable, Codable, Sendable {
     let id: String
     let name: String
     /// Whose account it is — shown under the name.

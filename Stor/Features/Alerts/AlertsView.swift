@@ -1,15 +1,23 @@
 import SwiftUI
 
 struct AlertsView: View {
+    @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         VStack(spacing: 0) {
             BackHeader(title: "Alerts") { dismiss() }
 
+            if appState.snapshot.alerts.isEmpty {
+                ContentUnavailableView {
+                    Label("No alerts", systemImage: "bell")
+                } description: {
+                    Text("We’ll let you know here when an envelope runs over, a payslip looks wrong or a goal moves.")
+                }
+            } else {
             ScrollView {
                 VStack(spacing: Spacing.sm + 2) {
-                    ForEach(MockData.alerts) { alert in
+                    ForEach(appState.snapshot.alerts) { alert in
                         card(alert)
                     }
                 }
@@ -18,6 +26,7 @@ struct AlertsView: View {
                 .padding(.bottom, Spacing.xl)
             }
             .scrollIndicators(.hidden)
+            }
         }
         .background(Color.storBackground)
         .navigationBarBackButtonHidden()
@@ -31,11 +40,11 @@ struct AlertsView: View {
                     .fill(alert.tone == .attention ? Color.storNegative : Color.storAccent)
                     .frame(width: 7, height: 7)
 
-                MonoLabel(alert.kind.rawValue, size: 9.5, tracking: 0.12)
+                MonoLabel(alert.kind.label, size: 9.5, tracking: 0.12)
 
                 Spacer(minLength: Spacing.sm)
 
-                MonoText(alert.when, size: 10, color: .storQuaternaryLabel)
+                MonoText(alert.date.formatted(.relative(presentation: .named, unitsStyle: .abbreviated)), size: 10, color: .storQuaternaryLabel)
             }
             .padding(.bottom, Spacing.sm)
 
@@ -65,6 +74,8 @@ struct AlertsView: View {
     }
 }
 
+#if DEBUG
 #Preview {
-    AlertsView().environment(AppState())
+    AlertsView().environment(AppState.preview)
 }
+#endif

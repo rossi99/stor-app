@@ -1,8 +1,8 @@
 import SwiftUI
 
 /// One holding in the net-worth breakdown. Liabilities carry a negative value.
-struct Account: Identifiable, Hashable, Sendable {
-    let id = UUID()
+struct Account: Identifiable, Hashable, Codable, Sendable {
+    var id = UUID().uuidString
     let name: String
     /// "Current account", "Stocks & shares", "2.1% to Mar 2028".
     let kind: String
@@ -12,8 +12,8 @@ struct Account: Identifiable, Hashable, Sendable {
 }
 
 /// Accounts grouped by who they belong to, plus a group for what is owed.
-struct AccountGroup: Identifiable, Hashable, Sendable {
-    let id = UUID()
+struct AccountGroup: Identifiable, Hashable, Codable, Sendable {
+    var id = UUID().uuidString
     let name: String
     /// `nil` for the liabilities group, which belongs to no one person.
     let ledger: Ledger?

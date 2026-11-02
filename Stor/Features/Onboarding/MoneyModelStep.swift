@@ -2,6 +2,8 @@ import SwiftUI
 
 /// Introduce the supported arrangement without offering incomplete flows.
 struct MoneyModelStep: View {
+    @Environment(AppState.self) private var appState
+
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.xl) {
             StepHeading(lead: "Your own money.", trail: "A shared plan.", step: 1)
@@ -17,7 +19,9 @@ struct MoneyModelStep: View {
             .padding(Spacing.lg)
             .frame(maxWidth: .infinity, alignment: .leading)
             .storCard()
-            Text("Next, choose your accounts and monthly contributions. You can edit both in Household.")
+            Text(appState.snapshot.linkableAccounts.isEmpty
+                 ? "Next, set your monthly contributions. You can edit them in Household."
+                 : "Next, choose your accounts and monthly contributions. You can edit both in Household.")
                 .onboardingBody()
         }
     }

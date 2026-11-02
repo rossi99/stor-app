@@ -3,29 +3,12 @@ import Charts
 
 /// Dated values with an explicit scale and native chart accessibility.
 struct Sparkline: View {
-    let values: [Double]
+    let points: [NetWorthPoint]
     var range: NetWorthRange = .oneYear
     @Environment(\.money) private var money
     @State private var selectedDate: Date?
 
-    private var points: [Point] {
-        let end = MockData.referenceDate
-        let calendar = Calendar(identifier: .gregorian)
-        let start: Date
-        switch range {
-        case .oneMonth:
-            start = calendar.date(from: calendar.dateComponents([.year, .month], from: end))!
-        case .sixMonths: start = calendar.date(byAdding: .month, value: -6, to: end)!
-        case .oneYear: start = calendar.date(byAdding: .month, value: -12, to: end)!
-        case .all: start = calendar.date(byAdding: .year, value: -7, to: end)!
-        }
-        return values.enumerated().map { index, value in
-            Point(id: index, date: start.addingTimeInterval(end.timeIntervalSince(start)
-                  * Double(index) / Double(max(1, values.count - 1))), value: value)
-        }
-    }
-
-    private var selectedPoint: Point? {
+    private var selectedPoint: NetWorthPoint? {
         guard let selectedDate else { return nil }
         return points.min { abs($0.date.timeIntervalSince(selectedDate)) < abs($1.date.timeIntervalSince(selectedDate)) }
     }
@@ -38,7 +21,7 @@ struct Sparkline: View {
         } else {
             VStack(alignment: .leading, spacing: Spacing.sm) {
                 if let point = selectedPoint {
-                    Text("\(point.date.formatted(date: .abbreviated, time: .omitted)) · \(money(point.value * 1000))")
+                    Text("\(point.date.formatted(date: .abbreviated, time: .omitted)) · \(money(point.value))")
                         .font(.headline)
                 } else {
                     Text("Touch and hold to explore values")
@@ -48,7 +31,7 @@ struct Sparkline: View {
                     LineMark(x: .value("Date", point.date), y: .value("Net worth", point.value))
                         .foregroundStyle(Color.storAccent)
                         .accessibilityLabel(point.date.formatted(date: .abbreviated, time: .omitted))
-                        .accessibilityValue(money(point.value * 1000))
+                        .accessibilityValue(money(point.value))
                     if let selectedPoint, selectedPoint.id == point.id {
                         RuleMark(x: .value("Selected date", point.date))
                             .foregroundStyle(Color.storSecondaryLabel)
@@ -56,12 +39,12 @@ struct Sparkline: View {
                             .foregroundStyle(Color.storAccent)
                     }
                 }
-                .chartYScale(domain: ((values.min() ?? 0) - 1)...((values.max() ?? 1) + 1))
+                .chartYScale(domain: ((points.map(\.value).min() ?? 0) - 1000)...((points.map(\.value).max() ?? 0) + 1000))
                 .chartYAxis {
                     AxisMarks(position: .leading, values: .automatic(desiredCount: 3)) { value in
                         AxisGridLine()
                         AxisValueLabel {
-                            if let amount = value.as(Double.self) { Text(money.thousands(amount * 1000)) }
+                            if let amount = value.as(Double.self) { Text(money.thousands(amount)) }
                         }
                     }
                 }
@@ -75,17 +58,11 @@ struct Sparkline: View {
                 .accessibilityLabel("Household net worth, \(range.caption)")
 
                 if let first = points.first, let last = points.last {
-                    Text("\(first.date.formatted(date: .abbreviated, time: .omitted)): \(money(first.value * 1000)) → \(last.date.formatted(date: .abbreviated, time: .omitted)): \(money(last.value * 1000))")
+                    Text("\(first.date.formatted(date: .abbreviated, time: .omitted)): \(money(first.value)) → \(last.date.formatted(date: .abbreviated, time: .omitted)): \(money(last.value))")
                         .font(.footnote).foregroundStyle(Color.storSecondaryLabel)
                 }
             }
             .onChange(of: range) { selectedDate = nil }
         }
-    }
-
-    private struct Point: Identifiable {
-        let id: Int
-        let date: Date
-        let value: Double
     }
 }

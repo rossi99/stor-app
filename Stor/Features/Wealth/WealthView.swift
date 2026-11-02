@@ -7,11 +7,32 @@ struct WealthView: View {
     @Environment(\.money) private var money
 
     var body: some View {
+        if let netWorth = appState.snapshot.netWorth {
+            content(netWorth)
+        } else {
+            VStack(spacing: 0) {
+                ScreenTitle("Net worth")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .screenInset()
+                    .padding(.top, Spacing.md)
+                    .padding(.bottom, 14)
+
+                ContentUnavailableView {
+                    Label("No net worth yet", systemImage: "chart.line.uptrend.xyaxis")
+                } description: {
+                    Text("Your savings, investments and what you owe will add up here once your accounts are linked.")
+                }
+            }
+            .background(Color.storBackground)
+        }
+    }
+
+    private func content(_ netWorth: NetWorth) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 MonoLabel("Household net worth", size: 10.5, tracking: 0.14)
 
-                Text(money(MockData.netWorth))
+                Text(money(netWorth.current))
                     .storDisplay(52)
                     .tracking(-1.3)
                     .foregroundStyle(Color.storInk)
@@ -22,7 +43,7 @@ struct WealthView: View {
 
                 AdaptiveStack(spacing: Spacing.sm) {
                     MonoText(money.signed(appState.netWorthRangeGain), size: 12.5,
-                             color: .storPositive)
+                             color: appState.netWorthRangeGain < 0 ? .storNegative : .storPositive)
                     Text(appState.netWorthRange.caption)
                         .storText(12.5)
                         .foregroundStyle(Color.storTertiaryLabel)
@@ -37,7 +58,9 @@ struct WealthView: View {
                         .padding(.bottom, Spacing.sm + 2)
                 }
 
-                liabilityToggle
+                if appState.hasLiabilities {
+                    liabilityToggle
+                }
             }
             .screenInset()
             .padding(.top, Spacing.md)
@@ -51,8 +74,14 @@ struct WealthView: View {
         @Bindable var state = appState
 
         return VStack(spacing: 14) {
-            Sparkline(values: MockData.netWorthSeries(appState.netWorthRange), range: appState.netWorthRange)
-                .animation(.easeInOut(duration: 0.3), value: appState.netWorthRange)
+            if appState.netWorthPoints.count < 2 {
+                Text("Not enough history for this range yet.")
+                    .font(.footnote).foregroundStyle(Color.storSecondaryLabel)
+                    .frame(maxWidth: .infinity, minHeight: 160)
+            } else {
+                Sparkline(points: appState.netWorthPoints, range: appState.netWorthRange)
+                    .animation(.easeInOut(duration: 0.3), value: appState.netWorthRange)
+            }
 
             HStack(spacing: 5) {
                 ForEach(NetWorthRange.allCases) { range in
@@ -152,6 +181,8 @@ struct AccountGroupCard: View {
     }
 }
 
+#if DEBUG
 #Preview {
-    WealthView().environment(AppState())
+    WealthView().environment(AppState.preview)
 }
+#endif

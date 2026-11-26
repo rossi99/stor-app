@@ -314,7 +314,22 @@ struct ModelRegressionTests {
         expect(!offline.isAuthenticated && offline.authError == BackendError.server(500).message, "A failed sign-in stays on the gate")
         await offline.restoreSession()
         expect(!offline.isAuthenticated && !offline.isRestoring, "A session that can't be checked leaves the sign-in gate")
+        let expired = AppState(backend: OfflineBackend(failure: .invalidCredentials), snapshot: MockData.snapshot)
+        expired.isAuthenticated = true
+        expired.openAddSpend()
+        expired.draft.entry = "5"
+        expired.commitSpend()
+        await settle { !expired.isAuthenticated }
+        expect(!expired.isAuthenticated && expired.authError == "Your session has ended. Sign in again."
+               && expired.snapshot == .empty, "A rejected session returns to the gate instead of failing every save")
+        let deleteFailure = await offline.deleteAccount(password: "x")
+        expect(deleteFailure == BackendError.server(500).message, "A failed deletion explains why")
+        let wrong = await AppState(backend: OfflineBackend(failure: .invalidCredentials)).deleteAccount(password: "x")
+        expect(wrong == "That password isn’t right.", "A wrong password is named as such")
         let local = AppState()
+        local.isAuthenticated = true
+        let deleted = await local.deleteAccount(password: "password1")
+        expect(deleted == nil && !local.isAuthenticated, "Deleting the account signs out")
         await local.restoreSession()
         expect(!local.isAuthenticated && !local.isRestoring, "Nothing saved means signing in")
         await local.signUp(email: "a@b.c", password: "password1")
@@ -420,12 +435,22 @@ struct ModelRegressionTests {
         StubProtocol.status = 409
         do { _ = try await http.createInvite(); expect(false, "A full household must throw") }
         catch { expect(error as? BackendError == .householdFull, "A 409 invite means nobody's seat is free") }
+        StubProtocol.status = 429
+        do { _ = try await http.signIn(email: "a@b.c", password: "x"); expect(false, "A 429 must throw") }
+        catch { expect(error as? BackendError == .tooManyAttempts, "A 429 asks the user to wait") }
         StubProtocol.status = 200
         StubProtocol.body = try! encoder.encode(HouseholdSnapshot.empty)
         try! await http.signOut()
         expect(StubProtocol.last?.url?.path == "/v1/auth/sign-out"
                && StubProtocol.last?.value(forHTTPHeaderField: "Authorization") == "Bearer abc", "Sign-out revokes the current token")
         expect(tokens.token == nil, "Sign-out forgets the saved token")
+        StubProtocol.body = Data(#"{"email":"a@b.c","hasCompletedSetup":true,"token":"abc"}"#.utf8)
+        _ = try! await http.signIn(email: "a@b.c", password: "secret")
+        bodies = [:]
+        try! await http.deleteAccount(password: "secret")
+        let deleteBody = try! JSONSerialization.jsonObject(with: bodies["DELETE /v1/auth/account"]!) as! [String: Any]
+        expect(deleteBody["password"] as? String == "secret" && tokens.token == nil, "Deleting sends the password and forgets the token")
+        StubProtocol.body = try! encoder.encode(HouseholdSnapshot.empty)
         _ = try! await http.loadHousehold()
         expect(StubProtocol.last?.value(forHTTPHeaderField: "Authorization") == nil, "Signed-out requests carry no token")
         print("Passed \(checks) model regression checks")
@@ -433,28 +458,30 @@ struct ModelRegressionTests {
 }
 
 struct OfflineBackend: StorBackend {
-    func signIn(email: String, password: String) async throws -> AuthSession { throw BackendError.server(500) }
-    func signUp(email: String, password: String) async throws -> AuthSession { throw BackendError.server(500) }
-    func loadHousehold() async throws -> HouseholdSnapshot { throw BackendError.server(500) }
-    func addSpend(_ spend: Transaction) async throws { throw BackendError.server(500) }
-    func saveContributions(_ contributions: [Ledger: Double]) async throws { throw BackendError.server(500) }
-    func saveMembers(_ profiles: [MemberProfile]) async throws { throw BackendError.server(500) }
-    func createInvite() async throws -> Invite { throw BackendError.server(500) }
-    func joinHousehold(code: String) async throws -> AuthSession { throw BackendError.server(500) }
-    func setGoalMonthly(id: String, monthly: Double) async throws { throw BackendError.server(500) }
-    func signOut() async throws { throw BackendError.server(500) }
-    func restoreSession() async throws -> AuthSession? { throw BackendError.server(500) }
-    func createGoal(_ goal: Goal) async throws { throw BackendError.server(500) }
-    func setEnvelopeBudget(ledger: Ledger, name: String, budget: Double) async throws { throw BackendError.server(500) }
-    func saveBill(_ bill: Bill) async throws { throw BackendError.server(500) }
-    func deleteBill(id: String) async throws { throw BackendError.server(500) }
-    func loadPlan(month: String) async throws -> BudgetPlan { throw BackendError.server(500) }
-    func setTransfer(month: String, key: String, done: Bool) async throws { throw BackendError.server(500) }
-    func saveBudget(_ settings: BudgetSettings) async throws { throw BackendError.server(500) }
-    func setLinkedAccounts(_ ids: Set<String>) async throws { throw BackendError.server(500) }
-    func setTopUpDay(_ day: Int) async throws { throw BackendError.server(500) }
+    var failure = BackendError.server(500)
+    func signIn(email: String, password: String) async throws -> AuthSession { throw failure }
+    func signUp(email: String, password: String) async throws -> AuthSession { throw failure }
+    func loadHousehold() async throws -> HouseholdSnapshot { throw failure }
+    func addSpend(_ spend: Transaction) async throws { throw failure }
+    func saveContributions(_ contributions: [Ledger: Double]) async throws { throw failure }
+    func saveMembers(_ profiles: [MemberProfile]) async throws { throw failure }
+    func createInvite() async throws -> Invite { throw failure }
+    func joinHousehold(code: String) async throws -> AuthSession { throw failure }
+    func setGoalMonthly(id: String, monthly: Double) async throws { throw failure }
+    func signOut() async throws { throw failure }
+    func restoreSession() async throws -> AuthSession? { throw failure }
+    func deleteAccount(password: String) async throws { throw failure }
+    func createGoal(_ goal: Goal) async throws { throw failure }
+    func setEnvelopeBudget(ledger: Ledger, name: String, budget: Double) async throws { throw failure }
+    func saveBill(_ bill: Bill) async throws { throw failure }
+    func deleteBill(id: String) async throws { throw failure }
+    func loadPlan(month: String) async throws -> BudgetPlan { throw failure }
+    func setTransfer(month: String, key: String, done: Bool) async throws { throw failure }
+    func saveBudget(_ settings: BudgetSettings) async throws { throw failure }
+    func setLinkedAccounts(_ ids: Set<String>) async throws { throw failure }
+    func setTopUpDay(_ day: Int) async throws { throw failure }
     func setHouseholdSize(_ size: Int) async throws { throw BackendError.server(409) }
-    func completeSetup() async throws { throw BackendError.server(500) }
+    func completeSetup() async throws { throw failure }
 }
 
 final class MemoryTokenStore: TokenStore, @unchecked Sendable {

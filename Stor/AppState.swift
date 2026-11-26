@@ -63,6 +63,7 @@ final class AppState {
         } catch {
             _ = try? await currentPlan
             loadState = .failed
+            if error as? BackendError == .invalidCredentials { expireSession() }
         }
     }
 
@@ -86,11 +87,21 @@ final class AppState {
             do {
                 try await call(backend)
                 if refreshesPlan { await refreshPlan() }
+            } catch BackendError.invalidCredentials {
+                undo()
+                expireSession()
             } catch {
                 undo()
                 syncError = failure
             }
         }
+    }
+
+    /// The server stopped accepting the session, so go back to the gate rather than failing every save.
+    private func expireSession() {
+        guard isAuthenticated else { return }
+        signOut()
+        authError = "Your session has ended. Sign in again."
     }
 
     // MARK: - Session
@@ -601,6 +612,19 @@ final class AppState {
         defer { isRestoring = false }
         if let session = try? await backend.restoreSession() {
             await begin(session)
+        }
+    }
+
+    /// Deletes the account; returns why it couldn't, or nil once it is gone and the app is back at the gate.
+    func deleteAccount(password: String) async -> String? {
+        do {
+            try await backend.deleteAccount(password: password)
+            signOut()
+            return nil
+        } catch BackendError.invalidCredentials {
+            return "That password isn’t right."
+        } catch {
+            return (error as? BackendError)?.message ?? "Couldn’t reach Stór. Check your connection and try again."
         }
     }
 

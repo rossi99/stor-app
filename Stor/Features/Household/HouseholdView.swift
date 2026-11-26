@@ -8,7 +8,7 @@ struct HouseholdView: View {
     @State private var showsSignOut = false
 
     private enum Editor: Identifiable, Hashable {
-        case contributions, accounts, invite, budget
+        case contributions, accounts, invite, budget, privacy, deleteAccount
         case member(Ledger)
 
         var id: String {
@@ -17,6 +17,8 @@ struct HouseholdView: View {
             case .accounts: "accounts"
             case .invite: "invite"
             case .budget: "budget"
+            case .privacy: "privacy"
+            case .deleteAccount: "deleteAccount"
             case .member(let ledger): "member.\(ledger.rawValue)"
             }
         }
@@ -77,7 +79,11 @@ struct HouseholdView: View {
                     Text("Hide balances and transaction amounts on screen. The payslip check appears in your monthly recap.")
                 }
                 Section {
+                    Button("Privacy") { editor = .privacy }
+                        .frame(minHeight: 44)
                     Button("Sign out", role: .destructive) { showsSignOut = true }
+                        .frame(minHeight: 44)
+                    Button("Delete account", role: .destructive) { editor = .deleteAccount }
                         .frame(minHeight: 44)
                 } footer: {
                     if !appState.userEmail.isEmpty { Text("Signed in as \(appState.userEmail)") }
@@ -100,6 +106,10 @@ struct HouseholdView: View {
                 InviteSheet()
             case .budget:
                 BudgetSettingsSheet(settings: appState.plan.settings)
+            case .privacy:
+                PrivacyView()
+            case .deleteAccount:
+                DeleteAccountSheet()
             case .member(let ledger):
                 MemberSheet(member: appState.member(ledger))
             case .accounts:

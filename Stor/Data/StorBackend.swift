@@ -19,7 +19,7 @@ struct Invite: Codable, Equatable, Sendable {
 }
 
 enum BackendError: Error, Equatable {
-    case invalidCredentials, emailTaken, notFound, householdFull, householdUnavailable, server(Int)
+    case invalidCredentials, emailTaken, notFound, householdFull, householdUnavailable, tooManyAttempts, server(Int)
 
     var message: String {
         switch self {
@@ -28,6 +28,7 @@ enum BackendError: Error, Equatable {
         case .notFound: "That code isn’t valid or has expired. Ask for a new one."
         case .householdFull: "Everyone in your household already has an account. Add a person in Household first."
         case .householdUnavailable: "That household is full, or yours already has spending or bills in it."
+        case .tooManyAttempts: "Too many attempts. Wait a minute, then try again."
         case .server: "Something went wrong on our side. Try again in a moment."
         }
     }
@@ -39,6 +40,7 @@ protocol StorBackend: Sendable {
     func signUp(email: String, password: String) async throws -> AuthSession
     func signOut() async throws
     func restoreSession() async throws -> AuthSession?
+    func deleteAccount(password: String) async throws
     func loadHousehold() async throws -> HouseholdSnapshot
     func addSpend(_ spend: Transaction) async throws
     func saveContributions(_ contributions: [Ledger: Double]) async throws
@@ -73,6 +75,7 @@ struct LocalBackend: StorBackend {
     }
     func signOut() async throws {}
     func restoreSession() async throws -> AuthSession? { nil }
+    func deleteAccount(password: String) async throws {}
     func loadHousehold() async throws -> HouseholdSnapshot { snapshot }
     func addSpend(_ spend: Transaction) async throws {}
     func saveContributions(_ contributions: [Ledger: Double]) async throws {}

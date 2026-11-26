@@ -22,6 +22,7 @@ actor HTTPBackend: StorBackend {
     private struct HouseholdSize: Encodable { let size: Int }
     private struct EnvelopeBudget: Encodable { let name: String; let budget: Double }
     private struct InviteCode: Encodable { let code: String }
+    private struct Password: Encodable { let password: String }
     private struct TransferTick: Encodable { let month: String; let key: String; let done: Bool }
     private struct Empty: Encodable {}
 
@@ -38,6 +39,12 @@ actor HTTPBackend: StorBackend {
         guard let current = token else { return }
         remember(nil)
         _ = try await send("POST", "auth/sign-out", Empty?.none, bearer: current)
+    }
+
+    /// The server deletes the account and every session, so the token goes too.
+    func deleteAccount(password: String) async throws {
+        _ = try await send("DELETE", "auth/account", Password(password: password))
+        remember(nil)
     }
 
     /// The stored session, if its token is still good; nil when there is none to check.
@@ -166,6 +173,7 @@ actor HTTPBackend: StorBackend {
             if bearer == nil, token != nil { remember(nil) }
             throw BackendError.invalidCredentials
         case 404: throw BackendError.notFound
+        case 429: throw BackendError.tooManyAttempts
         case 409: throw BackendError.emailTaken
         default: throw BackendError.server(status)
         }

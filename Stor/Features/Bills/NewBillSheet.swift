@@ -42,6 +42,8 @@ struct NewBillSheet: View {
                     Text("Joint pots").tag(Ledger.joint)
                     Text("Your cash account").tag(Ledger.you)
                 }
+                // A joint bill moved into one person's cash account would vanish for everyone else.
+                .disabled(!isNew && original.paidFrom == .joint)
                 if draft.paidFrom == .joint {
                     TextField("Pot, like Household & utilities", text: $draft.group)
                         .textInputAutocapitalization(.words)
@@ -61,7 +63,8 @@ struct NewBillSheet: View {
                 }
             } footer: {
                 Text(draft.paidFrom == .joint
-                     ? "Loans use your loan allocation, savings pots get their own transfer, and investments go to investing."
+                     ? (isNew ? "" : "A joint bill stays joint. To pay it yourself, delete it and add a new one. ")
+                       + "Loans use your loan allocation, savings pots get their own transfer, and investments go to investing."
                      : "Only you see your cash-account bills. Everyone else sees just the total.")
             }
 

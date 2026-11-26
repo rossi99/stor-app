@@ -1,37 +1,50 @@
 import SwiftUI
 
-/// The month's committed payments, on a calendar and then as a list.
+/// The household's recurring bills, by pot, with what lands this month.
 struct BillsView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.money) private var money
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var typeSize
-    @State private var showsNewBill = false
+    @State private var editing: BillDraft?
 
     var body: some View {
         VStack(spacing: 0) {
             BackHeader(title: "\(appState.month.monthName) bills") { dismiss() }
 
-            if appState.snapshot.bills.isEmpty {
+            if appState.plan.bills.isEmpty {
                 ContentUnavailableView {
                     Label("No bills yet", systemImage: "calendar")
                 } description: {
-                    Text("Shared bills will show here before they leave the pot.")
+                    Text("Add each bill, pot and saving once. Stór works out what lands each month.")
                 } actions: {
-                    CreateButton(title: "Add a bill") { showsNewBill = true }
+                    CreateButton(title: "Add a bill") { editing = BillDraft() }
                 }
             } else {
             ScrollView {
                 VStack(spacing: Spacing.md) {
-                    if !typeSize.isAccessibilitySize { BillCalendar() }
+                    if !typeSize.isAccessibilitySize && appState.plan.bills.contains(where: { $0.dueDay != nil }) {
+                        BillCalendar()
+                    }
 
-                    RowCard {
-                        ForEach(Array(appState.snapshot.bills.enumerated()), id: \.element.id) { index, bill in
-                            row(bill, isFirst: index == 0)
+                    ForEach(appState.billGroups, id: \.name) { group in
+                        VStack(alignment: .leading, spacing: Spacing.xs) {
+                            HStack {
+                                MonoLabel(group.name, size: 10.5, tracking: 0.12, color: .storTertiaryLabel)
+                                Spacer()
+                                MonoText(money(group.total), size: 12, color: .storSecondaryLabel)
+                            }
+                            .padding(.horizontal, Spacing.xs)
+                            .accessibilityElement(children: .combine)
+                            RowCard {
+                                ForEach(Array(group.bills.enumerated()), id: \.element.id) { index, bill in
+                                    row(bill, isFirst: index == 0)
+                                }
+                            }
                         }
                     }
 
-                    CreateButton(title: "Add a bill") { showsNewBill = true }
+                    CreateButton(title: "Add a bill") { editing = BillDraft() }
                 }
                 .screenInset()
                 .padding(.top, Spacing.xxs)
@@ -43,44 +56,63 @@ struct BillsView: View {
         .background(Color.storBackground)
         .navigationBarBackButtonHidden()
         .toolbar(.hidden, for: .navigationBar)
-        .sheet(isPresented: $showsNewBill) { NewBillSheet() }
+        .sheet(item: $editing) { draft in NewBillSheet(draft: draft) }
     }
 
     private func row(_ bill: Bill, isFirst: Bool) -> some View {
-        VStack(spacing: 0) {
+        let due = bill.dueDate(in: appState.month)
+        return VStack(spacing: 0) {
             RowSeparator(isVisible: !isFirst)
 
-            AdaptiveStack(spacing: 13) {
-                VStack(spacing: 0) {
-                    MonoText("\(MonthCalendar.day(of: bill.dueDate))", size: 15,
-                             color: isImminent(bill) ? .storNegative : .storInk)
-                    MonoLabel(MonthCalendar.format(bill.dueDate, "MMM"), size: 9, tracking: 0.08, color: .storQuaternaryLabel)
-                }
-                .frame(width: 38)
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(bill.name)
-                        .storText(14.5)
-                        .tracking(-0.116)
-                        .foregroundStyle(Color.storInk)
-                    if !bill.meta.isEmpty {
-                        MonoText(bill.meta, size: 11, color: .storTertiaryLabel)
+            Button { editing = BillDraft(bill) } label: {
+                AdaptiveStack(spacing: 13) {
+                    VStack(spacing: 0) {
+                        if let due {
+                            MonoText("\(MonthCalendar.day(of: due))", size: 15,
+                                     color: isImminent(due) ? .storNegative : .storInk)
+                            MonoLabel(MonthCalendar.format(due, "MMM"), size: 9, tracking: 0.08, color: .storQuaternaryLabel)
+                        } else {
+                            MonoLabel("—", size: 12, tracking: 0, color: .storQuaternaryLabel)
+                        }
                     }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(width: 38)
 
-                MonoText(money(bill.amount), size: 13.5,
-                         color: bill.isEstimated ? .storTertiaryLabel : .storInk)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(bill.name)
+                            .storText(14.5)
+                            .tracking(-0.116)
+                            .foregroundStyle(Color.storInk)
+                        MonoText(details(bill), size: 11, color: .storTertiaryLabel)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                    MonoText(money(bill.thisMonth), size: 13.5,
+                             color: bill.isEstimated || bill.thisMonth == 0 ? .storTertiaryLabel : .storInk)
+                }
+                .padding(.horizontal, 15)
+                .padding(.vertical, 14)
+                .contentShape(.rect)
             }
-            .padding(.horizontal, 15)
-            .padding(.vertical, 14)
+            .buttonStyle(.plain)
+            .accessibilityHint("Edit this bill")
+            .contextMenu {
+                Button("Delete", systemImage: "trash", role: .destructive) { appState.deleteBill(bill) }
+            }
         }
     }
 
+    /// "£120 weekly · Fuel card", so the this-month figure on the right makes sense.
+    private func details(_ bill: Bill) -> String {
+        var parts = ["\(money(bill.amount)) \(bill.cadence.lowercased())"]
+        if !bill.isPersonal && bill.kind != .bill { parts.append(bill.kind.title) }
+        if !bill.meta.isEmpty { parts.append(bill.meta) }
+        return parts.joined(separator: " · ")
+    }
+
     /// Within four days of today, so it warrants the warning colour.
-    private func isImminent(_ bill: Bill) -> Bool {
-        bill.dueDate >= appState.month.startOfToday()
-            && bill.dueDate < MonthCalendar(date: appState.month.startOfToday()).adding(days: 5)
+    private func isImminent(_ due: Date) -> Bool {
+        due >= appState.month.startOfToday()
+            && due < MonthCalendar(date: appState.month.startOfToday()).adding(days: 5)
     }
 }
 
@@ -92,7 +124,7 @@ struct BillCalendar: View {
     private var month: MonthCalendar { appState.month }
 
     private var billDays: Set<Int> {
-        Set(appState.snapshot.bills.filter { month.isSameMonth($0.dueDate) }.map { MonthCalendar.day(of: $0.dueDate) })
+        Set(appState.plan.bills.filter { $0.thisMonth > 0 }.compactMap { $0.dueDate(in: month).map(MonthCalendar.day(of:)) })
     }
 
     var body: some View {

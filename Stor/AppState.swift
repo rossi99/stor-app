@@ -30,16 +30,19 @@ final class AppState {
     private let backend: any StorBackend
     private let clock: () -> Date
 
-    init(backend: any StorBackend = LocalBackend(), snapshot: HouseholdSnapshot = .empty,
+    init(backend: any StorBackend = LocalBackend(), snapshot: HouseholdSnapshot = .empty, plan: BudgetPlan? = nil,
          clock: @escaping () -> Date = Date.init) {
         self.backend = backend
         self.snapshot = snapshot
         self.clock = clock
+        self.plan = plan ?? .empty(month: BudgetPlan.key(for: clock()))
     }
 
     // MARK: - Data
 
     var snapshot: HouseholdSnapshot
+    /// This month's budget plan, bills included.
+    var plan: BudgetPlan
     var loadState: LoadState = .loaded
     /// A write the server refused, already rolled back, waiting to be shown.
     var syncError: String?
@@ -48,22 +51,41 @@ final class AppState {
 
     func loadHousehold() async {
         loadState = .loading
+        let month = BudgetPlan.key(for: clock())
+        async let household = backend.loadHousehold()
+        async let currentPlan = backend.loadPlan(month: month)
         do {
-            snapshot = try await backend.loadHousehold()
+            snapshot = try await household
+            // A plan that fails to load reads as an empty month rather than failing the household.
+            plan = (try? await currentPlan) ?? .empty(month: month)
             addedTransactions = []
             loadState = .loaded
         } catch {
+            _ = try? await currentPlan
             loadState = .failed
         }
     }
 
+    var planMonth: String { BudgetPlan.key(for: clock()) }
+
+    /// Picks up the server's recalculation after a write that changes the plan.
+    func refreshPlan() async {
+        if let fresh = try? await backend.loadPlan(month: planMonth) { plan = fresh }
+    }
+
+    /// Any month's plan, for browsing without replacing this month's.
+    func loadPlan(month: String) async -> BudgetPlan? {
+        try? await backend.loadPlan(month: month)
+    }
+
     /// Runs a write after the local change; a failure undoes it and tells the user.
-    private func sync(failure: String, undo: @escaping () -> Void,
+    private func sync(failure: String, refreshesPlan: Bool = false, undo: @escaping () -> Void,
                       _ call: @escaping (any StorBackend) async throws -> Void) {
         let backend = backend
         Task {
             do {
                 try await call(backend)
+                if refreshesPlan { await refreshPlan() }
             } catch {
                 undo()
                 syncError = failure
@@ -144,7 +166,7 @@ final class AppState {
             }
             if !ledgers.contains(ledger) { ledger = .joint }
             if let feedFilter, !ledgers.contains(feedFilter) { self.feedFilter = nil }
-            sync(failure: "Your household size couldn’t be changed. Anyone with spending recorded can’t be removed.", undo: { [weak self] in
+            sync(failure: "Your household size couldn’t be changed. Anyone with spending recorded can’t be removed.", refreshesPlan: true, undo: { [weak self] in
                 self?.members = previous
             }) { try await $0.setHouseholdSize(newValue) }
         }
@@ -164,7 +186,7 @@ final class AppState {
             members[i].initials = HouseholdMember.initials(of: profile.name)
             members[i].netPay = profile.netPay
         }
-        sync(failure: "Those names and pay couldn’t be saved.", undo: { [weak self] in
+        sync(failure: "Those names and pay couldn’t be saved.", refreshesPlan: true, undo: { [weak self] in
             self?.members = previous
         }) { try await $0.saveMembers(profiles) }
         return true
@@ -412,21 +434,78 @@ final class AppState {
 
     // MARK: - Bills
 
-    /// Soonest first, excluding anything already paid.
+    /// Joint bills with a due day still to come this month, soonest first. Nothing lands this month means not upcoming.
     var upcomingBills: [Bill] {
         let today = month.startOfToday()
-        return snapshot.bills.filter { $0.dueDate >= today }.sorted { $0.dueDate < $1.dueDate }
+        return plan.bills
+            .filter { !$0.isPersonal && $0.thisMonth > 0 && ($0.dueDate(in: month) ?? .distantPast) >= today }
+            .sorted { $0.dueDate(in: month)! < $1.dueDate(in: month)! }
     }
 
+    /// Joint bills by group, largest group first, then your cash-account bills under "Your cash account".
+    var billGroups: [(name: String, total: Double, bills: [Bill])] {
+        let joint = Dictionary(grouping: plan.bills.filter { !$0.isPersonal }, by: \.group)
+            .map { (name: $0.key, total: $0.value.reduce(0) { $0 + $1.thisMonth },
+                    bills: $0.value.sorted { ($0.thisMonth, $1.name) > ($1.thisMonth, $0.name) }) }
+            .sorted { ($0.total, $1.name) > ($1.total, $0.name) }
+        let own = plan.bills.filter(\.isPersonal)
+        return own.isEmpty ? joint : joint + [(name: "Your cash account", total: own.reduce(0) { $0 + $1.thisMonth }, bills: own)]
+    }
+
+    /// Groups already in use, for picking a pot.
+    var billGroupNames: [String] {
+        Array(Set(plan.bills.filter { !$0.isPersonal }.map(\.group))).sorted()
+    }
+
+    /// Adds the bill, or replaces the one with the same id.
     @discardableResult
-    func createBill(_ draft: BillDraft) -> Bool {
+    func saveBill(_ draft: BillDraft) -> Bool {
         guard let bill = draft.bill() else { return false }
-        snapshot.bills.append(bill)
-        snapshot.bills.sort { $0.dueDate < $1.dueDate }
-        sync(failure: "Your \(bill.name) bill couldn’t be saved.", undo: { [weak self] in
-            self?.snapshot.bills.removeAll { $0.id == bill.id }
-        }) { try await $0.createBill(bill) }
+        let previous = plan.bills
+        if let i = plan.bills.firstIndex(where: { $0.id == bill.id }) {
+            plan.bills[i] = bill
+        } else {
+            plan.bills.append(bill)
+        }
+        sync(failure: "Your \(bill.name) bill couldn’t be saved.", refreshesPlan: true, undo: { [weak self] in
+            self?.plan.bills = previous
+        }) { try await $0.saveBill(bill) }
         return true
+    }
+
+    func deleteBill(_ bill: Bill) {
+        let previous = plan.bills
+        plan.bills.removeAll { $0.id == bill.id }
+        sync(failure: "Your \(bill.name) bill couldn’t be deleted.", refreshesPlan: true, undo: { [weak self] in
+            self?.plan.bills = previous
+        }) { try await $0.deleteBill(id: bill.id) }
+    }
+
+    // MARK: - Plan
+
+    @discardableResult
+    func saveBudget(_ settings: BudgetSettings) -> Bool {
+        guard min(settings.essentialPct, settings.discretionaryPct, settings.savingPct) >= 0,
+              settings.essentialPct + settings.discretionaryPct + settings.savingPct == 100,
+              settings.loanAllocation >= 0, (settings.cashCap ?? 0) >= 0 else { return false }
+        let previous = plan.settings
+        plan.settings = settings
+        sync(failure: "Your budget settings couldn’t be saved.", refreshesPlan: true, undo: { [weak self] in
+            self?.plan.settings = previous
+        }) { try await $0.saveBudget(settings) }
+        return true
+    }
+
+    /// Ticks or unticks a payday transfer. Another month's plan, being browsed, updates its own copy.
+    func setTransfer(_ key: String, done: Bool, month: String) {
+        func mark(_ value: Bool) {
+            guard plan.month == month, let i = plan.transfers.firstIndex(where: { $0.key == key }) else { return }
+            plan.transfers[i].done = value
+        }
+        mark(done)
+        sync(failure: "That transfer couldn’t be ticked off.", undo: { mark(!done) }) {
+            try await $0.setTransfer(month: month, key: key, done: done)
+        }
     }
 
     // MARK: - Wealth
@@ -543,6 +622,7 @@ final class AppState {
         hasCompletedSetup = false
         onboardingStep = 0
         snapshot = .empty
+        plan = .empty(month: planMonth)
         addedTransactions = []
         syncError = nil
         authError = nil

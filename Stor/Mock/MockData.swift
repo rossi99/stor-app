@@ -22,7 +22,6 @@ enum MockData {
             transactions: transactions,
             goals: goals,
             emergencyFund: EmergencyFund(months: 4.2, note: "Target is 6 months. At £600/mo you reach it in about 14 months."),
-            bills: bills,
             netWorth: netWorth,
             accountGroups: accountGroups,
             recaps: recaps,

@@ -39,8 +39,8 @@ struct BillsPreviewCard: View {
     }
 
     private var trailing: String {
-        let total = upcoming.reduce(0) { $0 + $1.amount }
-        return "\(money(total)) by \(MonthCalendar.format(upcoming.last?.dueDate ?? appState.month.date, "d MMM"))"
+        let total = upcoming.reduce(0) { $0 + $1.thisMonth }
+        return "\(money(total)) by \(MonthCalendar.format(upcoming.last?.dueDate(in: appState.month) ?? appState.month.date, "d MMM"))"
     }
 
     var body: some View {
@@ -80,10 +80,10 @@ struct BillsPreviewCard: View {
 
     private func billTile(_ bill: Bill) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            MonoLabel(MonthCalendar.format(bill.dueDate, "EEE d").uppercased(), size: 10, tracking: 0.06,
+            MonoLabel(MonthCalendar.format(bill.dueDate(in: appState.month) ?? appState.month.date, "EEE d").uppercased(), size: 10, tracking: 0.06,
                       color: .storTertiaryLabel)
 
-            Text(money(bill.amount))
+            Text(money(bill.thisMonth))
                 .storText(13, weight: .medium)
                 .tracking(-0.13)
                 .foregroundStyle(Color.storInk)

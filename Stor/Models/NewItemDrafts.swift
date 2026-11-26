@@ -48,27 +48,60 @@ struct EnvelopeDraft {
     var amount: Double? { MoneyInput.amount(from: budget).flatMap { $0 > 0 ? $0 : nil } }
 }
 
-/// A bill being added to the joint pot.
-struct BillDraft {
+/// A recurring bill being added or edited. "Specific months" is a monthly bill landing only in `months`.
+struct BillDraft: Equatable, Identifiable {
+    enum Schedule: Hashable { case every(Bill.Frequency), specificMonths }
+
+    var id = UUID().uuidString
     var name = ""
     var amount = ""
-    var dueDay = Date()
+    var schedule = Schedule.every(.monthly)
+    var months: Set<Int> = []
+    var paidFrom = Ledger.joint
+    var group = ""
+    var kind = Bill.Kind.bill
+    var category = Bill.Category.essential
+    var dueDay: Int?
+    var meta = ""
     var isEstimated = false
+    /// Kept from the bill being edited, so its row reads right until the plan reloads.
+    private var thisMonth: Double?
 
-    var hasContent: Bool { !(name + amount).trimmingCharacters(in: .whitespaces).isEmpty }
+    init() {}
 
-    /// The contract sends date-only values as 12:00 UTC so every timezone shows the same day.
-    var dueDate: Date {
-        let day = Calendar(identifier: .gregorian).dateComponents([.year, .month, .day], from: dueDay)
-        var utc = Calendar(identifier: .gregorian)
-        utc.timeZone = .gmt
-        return utc.date(from: DateComponents(year: day.year, month: day.month, day: day.day, hour: 12)) ?? dueDay
+    init(_ bill: Bill) {
+        id = bill.id
+        name = bill.name
+        amount = MoneyInput.entry(for: bill.amount)
+        schedule = bill.months.isEmpty ? .every(bill.frequency) : .specificMonths
+        months = Set(bill.months)
+        paidFrom = bill.paidFrom
+        group = bill.group
+        kind = bill.kind
+        category = bill.category
+        dueDay = bill.dueDay
+        meta = bill.meta
+        isEstimated = bill.isEstimated
+        thisMonth = bill.thisMonth
     }
 
-    func bill(id: String = UUID().uuidString) -> Bill? {
+    var hasContent: Bool { !(name + amount + group + meta).trimmingCharacters(in: .whitespaces).isEmpty }
+
+    func bill() -> Bill? {
         let title = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !title.isEmpty, let amount = MoneyInput.amount(from: amount), amount > 0 else { return nil }
-        return Bill(id: id, dueDate: dueDate, name: title, meta: isEstimated ? "Estimated" : "", amount: amount,
-                    isEstimated: isEstimated)
+        let pot = group.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty, title.count <= 100, meta.count <= 100,
+              let amount = MoneyInput.amount(from: amount), amount > 0,
+              paidFrom != .joint || (!pot.isEmpty && pot.count <= 60),
+              schedule != .specificMonths || !months.isEmpty,
+              dueDay.map({ (1...31).contains($0) }) ?? true else { return nil }
+        let frequency: Bill.Frequency = if case .every(let f) = schedule { f } else { .monthly }
+        // Cash-account bills sit outside the pots and the 50/30/20 split.
+        let personal = paidFrom != .joint
+        return Bill(id: id, name: title, group: personal ? "" : pot, kind: personal ? .bill : kind,
+                    category: personal ? .discretionary : category, amount: amount, frequency: frequency,
+                    months: schedule == .specificMonths ? months.sorted() : [], paidFrom: paidFrom, dueDay: dueDay,
+                    meta: meta.trimmingCharacters(in: .whitespacesAndNewlines), isEstimated: isEstimated,
+                    thisMonth: thisMonth ?? amount)
     }
 }

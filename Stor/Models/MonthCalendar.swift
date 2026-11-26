@@ -33,6 +33,20 @@ struct MonthCalendar {
 
     func adding(days: Int) -> Date { Self.calendar.date(byAdding: .day, value: days, to: date) ?? date }
 
+    /// Noon on `day` of this month, so the date survives any timezone shift on display.
+    func date(onDay day: Int) -> Date {
+        var parts = Self.calendar.dateComponents([.year, .month], from: date)
+        parts.day = day
+        parts.hour = 12
+        return Self.calendar.date(from: parts) ?? date
+    }
+
+    /// "Jan" for 1.
+    static func monthAbbreviation(_ month: Int) -> String {
+        let symbols = DateFormatter().shortMonthSymbols ?? []
+        return symbols.indices.contains(month - 1) ? String(symbols[month - 1].prefix(3)) : "\(month)"
+    }
+
     static func day(of date: Date) -> Int { calendar.component(.day, from: date) }
 
     static func format(_ date: Date, _ pattern: String) -> String {

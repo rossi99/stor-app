@@ -105,15 +105,57 @@ extension MockData {
 
     // MARK: - Bills
 
+    private static func bill(_ id: String, _ name: String, _ group: String, _ kind: Bill.Kind, _ category: Bill.Category,
+                             _ amount: Double, in days: Int?, meta: String = "", estimated: Bool = false) -> Bill {
+        Bill(id: id, name: name, group: group, kind: kind, category: category, amount: amount, frequency: .monthly,
+             months: [], paidFrom: .joint, dueDay: days.map { MonthCalendar.day(of: daysFromNow($0)) }, meta: meta,
+             isEstimated: estimated, thisMonth: amount)
+    }
+
     static var bills: [Bill] {
         [
-            Bill(dueDate: daysFromNow(2),  name: "Council tax",      meta: "Camden · direct debit", amount: 212, isEstimated: false),
-            Bill(dueDate: daysFromNow(4),  name: "Broadband",        meta: "Community Fibre",       amount:  38, isEstimated: false),
-            Bill(dueDate: daysFromNow(8),  name: "Energy",           meta: "Octopus · estimated",   amount: 142, isEstimated: true),
-            Bill(dueDate: daysFromNow(11), name: "Car loan",         meta: "Sam's personal",        amount: 186, isEstimated: false),
-            Bill(dueDate: daysFromNow(14), name: "Subscriptions",    meta: "7 renewals",            amount:  47, isEstimated: false),
-            Bill(dueDate: daysFromNow(16), name: "Savings transfer", meta: "To Chase Saver",        amount: 600, isEstimated: false),
+            bill("rent", "Rent", "Home", .bill, .essential, 1850, in: 2, meta: "Standing order"),
+            bill("council", "Council tax", "Home", .bill, .essential, 212, in: 4, meta: "Camden · direct debit"),
+            bill("broadband", "Broadband", "Home", .bill, .essential, 38, in: 8, meta: "Community Fibre"),
+            bill("energy", "Energy", "Home", .bill, .essential, 142, in: 11, meta: "Octopus", estimated: true),
+            bill("food", "Groceries top-up", "Groceries", .pot, .essential, 520, in: nil),
+            bill("subs", "Streaming", "Subscriptions", .bill, .discretionary, 47, in: 14),
+            bill("holiday", "Holiday", "Holiday", .saving, .discretionary, 250, in: nil),
+            bill("isa", "Stocks & shares", "Investing", .investment, .saving, 150, in: nil),
         ]
+    }
+
+    /// Ana and Sam's month, worked out as the server would for these bills.
+    static var plan: BudgetPlan {
+        BudgetPlan(
+            month: BudgetPlan.key(for: Date()), hub: .you,
+            settings: BudgetSettings(essentialPct: 50, discretionaryPct: 30, savingPct: 20, loanAllocation: 0, cashCap: 700),
+            income: 5945, loanRepayments: 0, loanOverpay: 0, fixedInvesting: 150, addInvesting: 1386, billsAndPots: 3059,
+            cashEach: 700, stays: 700, bills: bills,
+            groups: [.init(name: "Home", amount: 2242), .init(name: "Investing", amount: 1536),
+                     .init(name: "Cash accounts", amount: 1400), .init(name: "Groceries", amount: 520),
+                     .init(name: "Savings pots", amount: 250), .init(name: "Subscriptions", amount: 47)],
+            transfers: [
+                .init(key: "pay:2", kind: .payIn, ledger: .partner, group: nil, amount: 2604, done: true),
+                .init(key: "pot:Home", kind: .pot, ledger: nil, group: "Home", amount: 2242, done: true),
+                .init(key: "pot:Groceries", kind: .pot, ledger: nil, group: "Groceries", amount: 520, done: false),
+                .init(key: "pot:Subscriptions", kind: .pot, ledger: nil, group: "Subscriptions", amount: 47, done: false),
+                .init(key: "pot:Holiday", kind: .pot, ledger: nil, group: "Holiday", amount: 250, done: false),
+                .init(key: "investing:Investing", kind: .investing, ledger: nil, group: "Investing", amount: 1536, done: false),
+                .init(key: "cash:2", kind: .cash, ledger: .partner, group: nil, amount: 700, done: false),
+            ],
+            split: [.init(category: .essential, allocated: 2972.5, actual: 2972.5, using: 2762, status: .left),
+                    .init(category: .discretionary, allocated: 1783.5, actual: 1783.5, using: 297, status: .spare),
+                    .init(category: .saving, allocated: 1189, actual: 2675.5, using: 150, status: .spare)],
+            biggest: bills.filter { $0.kind != .saving && $0.kind != .investment }
+                .sorted { $0.amount > $1.amount }.map { .init(id: $0.id, name: $0.name, group: $0.group, amount: $0.amount) },
+            cashAccounts: [.init(ledger: .you, allowance: 700, personalBills: 0, left: 700),
+                           .init(ledger: .partner, allowance: 700, personalBills: 45, left: 655)],
+            forecast: (0..<12).map { offset in
+                let month = MonthCalendar(date: Date()).adding(months: offset)
+                return .init(month: BudgetPlan.key(for: month), bills: 2289, potsAndSavings: 770, addInvesting: 1386,
+                             cashEach: 700, extraBills: [], isShort: false)
+            })
     }
 
     // MARK: - Alerts
@@ -142,6 +184,6 @@ extension MockData {
 
 extension AppState {
     /// A populated household for SwiftUI previews.
-    static var preview: AppState { AppState(snapshot: MockData.snapshot) }
+    static var preview: AppState { AppState(snapshot: MockData.snapshot, plan: MockData.plan) }
 }
 #endif

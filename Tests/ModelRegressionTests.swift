@@ -184,18 +184,45 @@ struct ModelRegressionTests {
         empty.ledger = .joint
         expect(empty.envelopes.count == 1, "A personal envelope stays out of the pot")
 
-        var utc = Calendar(identifier: .gregorian)
-        utc.timeZone = .gmt
-        let late = Calendar(identifier: .gregorian).date(from: DateComponents(year: 2026, month: 11, day: 20, hour: 23, minute: 30))!
-        let billDue = BillDraft(dueDay: late).dueDate
-        expect(utc.dateComponents([.day, .hour], from: billDue) == DateComponents(day: 20, hour: 12), "Bills are sent as noon UTC on the chosen day")
-        expect(BillDraft(name: "Rent", amount: "0").bill() == nil && BillDraft(name: "", amount: "5").bill() == nil, "A bill needs a name and an amount")
-        let later = empty.month.adding(days: 3)
-        expect(empty.createBill(BillDraft(name: "Council tax", amount: "180", dueDay: later)), "A valid bill saves")
-        expect(empty.createBill(BillDraft(name: "Water", amount: "40", dueDay: empty.month.date, isEstimated: true)), "An estimated bill saves")
-        expect(empty.snapshot.bills.map(\.name) == ["Water", "Council tax"], "Bills stay in due-date order")
-        expect(empty.snapshot.bills[0].meta == "Estimated" && empty.snapshot.bills[1].meta.isEmpty, "Only estimates are labelled")
-        expect(empty.upcomingBills.count == 2, "A bill due today is still upcoming")
+        func billDraft(_ name: String, _ amount: String, group: String = "Home") -> BillDraft {
+            var d = BillDraft(); d.name = name; d.amount = amount; d.group = group; return d
+        }
+        expect(billDraft("Rent", "0").bill() == nil && billDraft("", "5").bill() == nil, "A bill needs a name and an amount")
+        expect(billDraft("Rent", "900", group: " ").bill() == nil, "A joint bill needs a pot")
+        var monthsOnly = billDraft("Car tax", "20", group: "Cars")
+        monthsOnly.schedule = .specificMonths
+        expect(monthsOnly.bill() == nil, "Specific months needs at least one month")
+        monthsOnly.months = [9, 1]
+        expect(monthsOnly.bill()?.months == [1, 9] && monthsOnly.bill()?.frequency == .monthly, "Specific months is a sorted monthly bill")
+        var weekly = billDraft("Fuel", "60", group: "Fuel")
+        weekly.schedule = .every(.weekly)
+        weekly.months = [3]
+        expect(weekly.bill()?.months == [] && weekly.bill()?.frequency == .weekly, "Months only travel with specific months")
+        var cash = billDraft("Gym", "30", group: "")
+        cash.paidFrom = .you
+        cash.kind = .loan
+        let gym = cash.bill()
+        expect(gym?.group == "" && gym?.kind == .bill && gym?.category == .discretionary, "A cash-account bill drops pot, type and category")
+        let feb = MonthCalendar(date: Calendar(identifier: .gregorian).date(from: DateComponents(year: 2027, month: 2, day: 10))!)
+        var late = gym!
+        late.dueDay = 31
+        expect(Calendar(identifier: .gregorian).component(.day, from: late.dueDate(in: feb)!) == 28, "Day 31 lands on 28 Feb")
+        late.dueDay = nil
+        expect(late.dueDate(in: feb) == nil, "No due day, no date")
+
+        var rent = billDraft("Council tax", "180")
+        rent.dueDay = MonthCalendar.day(of: empty.month.date)
+        expect(empty.saveBill(rent) && empty.plan.bills.count == 1, "A valid bill saves into the plan")
+        expect(empty.upcomingBills.count == 1, "A bill due today is still upcoming")
+        var edited = BillDraft(empty.plan.bills[0])
+        edited.amount = "190"
+        expect(empty.saveBill(edited) && empty.plan.bills.count == 1 && empty.plan.bills[0].amount == 190, "Saving the same id edits in place")
+        expect(empty.saveBill(cash) && empty.billGroups.map(\.name) == ["Home", "Your cash account"], "Your cash-account bills group last")
+        empty.deleteBill(empty.plan.bills[1])
+        expect(empty.plan.bills.count == 1, "A deleted bill leaves the plan")
+        expect(!empty.saveBudget(BudgetSettings(essentialPct: 50, discretionaryPct: 30, savingPct: 30, loanAllocation: 0)), "Targets must add up to 100")
+        expect(empty.saveBudget(BudgetSettings(essentialPct: 60, discretionaryPct: 20, savingPct: 20, loanAllocation: 300, cashCap: 400))
+               && empty.plan.settings.cashCap == 400, "Valid budget settings save")
 
         expect(HouseholdMember.initials(of: "Ana María Ruiz") == "AR" && HouseholdMember.initials(of: " sam ") == "S"
                && HouseholdMember.initials(of: "") == "", "Initials match the server's first-and-last rule")
@@ -265,10 +292,21 @@ struct ModelRegressionTests {
         await settle { offline.syncError != nil }
         expect(offline.you.name == named, "A refused name change rolls back")
         offline.syncError = nil
-        let billCount = offline.snapshot.bills.count
-        offline.createBill(BillDraft(name: "Gym", amount: "30"))
+        offline.plan = MockData.plan
+        let billCount = offline.plan.bills.count
+        offline.saveBill({ var d = BillDraft(); d.name = "Gym"; d.amount = "30"; d.group = "Health"; return d }())
         await settle { offline.syncError != nil }
-        expect(offline.snapshot.bills.count == billCount, "A refused bill is removed")
+        expect(offline.plan.bills.count == billCount, "A refused bill is removed")
+        offline.syncError = nil
+        offline.deleteBill(offline.plan.bills[0])
+        await settle { offline.syncError != nil }
+        expect(offline.plan.bills.count == billCount, "A refused delete puts the bill back")
+        offline.syncError = nil
+        let tick = offline.plan.transfers[2]
+        offline.setTransfer(tick.key, done: !tick.done, month: offline.plan.month)
+        expect(offline.plan.transfers[2].done != tick.done, "A tick shows at once")
+        await settle { offline.syncError != nil }
+        expect(offline.plan.transfers[2].done == tick.done, "A refused tick rolls back")
         let name = offline.snapshot.name
         await offline.loadHousehold()
         expect(offline.loadState == .failed && offline.snapshot.name == name, "A failed load is not an empty household")
@@ -338,12 +376,31 @@ struct ModelRegressionTests {
         bodies = [:]
         try! await http.createGoal(GoalDraft(name: "Car", target: "10", monthly: "1").goal(id: "g1")!)
         try! await http.setEnvelopeBudget(ledger: .joint, name: "Home & repairs", budget: 120)
-        try! await http.createBill(BillDraft(name: "Rent", amount: "900", dueDay: late).bill(id: "b1")!)
-        expect(Set(bodies.keys) == ["POST /v1/goals", "PUT /v1/ledgers/joint/envelopes", "POST /v1/bills"], "Creates use the contract paths")
+        var b1 = billDraft("Rent", "900")
+        b1.id = "b1"
+        b1.dueDay = 28
+        try! await http.saveBill(b1.bill()!)
+        expect(Set(bodies.keys) == ["POST /v1/goals", "PUT /v1/ledgers/joint/envelopes", "PUT /v1/bills/b1"], "Creates use the contract paths")
         let envelopeBody = try! JSONSerialization.jsonObject(with: bodies["PUT /v1/ledgers/joint/envelopes"]!) as! [String: Any]
         expect(envelopeBody["name"] as? String == "Home & repairs" && envelopeBody["budget"] as? Double == 120, "Envelope names travel in the body")
-        let billBody = try! JSONSerialization.jsonObject(with: bodies["POST /v1/bills"]!) as! [String: Any]
-        expect(billBody["id"] as? String == "b1" && billBody["dueDate"] as? String == "2026-11-20T12:00:00Z", "Bills carry their id and a noon UTC date")
+        let billBody = try! JSONSerialization.jsonObject(with: bodies["PUT /v1/bills/b1"]!) as! [String: Any]
+        expect(billBody["id"] as? String == "b1" && billBody["dueDay"] as? Int == 28 && billBody["paidFrom"] as? String == "joint"
+               && billBody["kind"] as? String == "bill" && billBody["frequency"] as? String == "monthly", "Bills travel in the contract's shape")
+        try! await http.deleteBill(id: "b1")
+        try! await http.setTransfer(month: "2027-01", key: "pot:Home", done: true)
+        let tickBody = try! JSONSerialization.jsonObject(with: bodies["PUT /v1/plan/transfers"]!) as! [String: Any]
+        expect(bodies["DELETE /v1/bills/b1"] != nil && tickBody["key"] as? String == "pot:Home" && tickBody["done"] as? Bool == true,
+               "Deletes and ticks use the contract paths")
+        try! await http.saveBudget(BudgetSettings(essentialPct: 50, discretionaryPct: 30, savingPct: 20, loanAllocation: 300, cashCap: nil))
+        expect(bodies["PUT /v1/household/budget"] != nil, "Budget settings use the contract path")
+        StubProtocol.body = try! encoder.encode(MockData.plan)
+        let fetched = try! await http.loadPlan(month: "2027-01")
+        expect(StubProtocol.last?.url?.path == "/v1/plan" && StubProtocol.last?.url?.query == "month=2027-01"
+               && fetched == MockData.plan, "The plan loads by month and round-trips through JSON")
+        StubProtocol.body = Data(#"{"month":"2027-01","hub":"partner","settings":{"essentialPct":50,"discretionaryPct":30,"savingPct":20,"loanAllocation":0,"cashCap":null},"income":0,"loanRepayments":0,"loanOverpay":0,"fixedInvesting":0,"addInvesting":0,"billsAndPots":0,"cashEach":0,"stays":0,"bills":[{"id":"x","name":"Tax","group":"Car","kind":"bill","category":"essential","amount":20,"frequency":"monthly","months":[1],"paidFrom":"joint","dueDay":null,"meta":"","isEstimated":false,"thisMonth":20}],"groups":[],"transfers":[{"key":"pay:1","kind":"payIn","ledger":"partner","amount":5,"done":false}],"split":[],"biggest":[],"cashAccounts":[],"forecast":[]}"#.utf8)
+        let server = try! await http.loadPlan(month: "2027-01")
+        expect(server.hub == .partner && server.settings.cashCap == nil && server.bills[0].dueDay == nil
+               && server.transfers[0].group == nil, "Server plans decode nulls and missing keys")
         bodies = [:]
         try! await http.saveMembers([MemberProfile(ledger: .partner, name: "Sam", netPay: 2182.5)])
         let membersBody = try! JSONSerialization.jsonObject(with: bodies["PUT /v1/household/members"]!) as! [[String: Any]]
@@ -389,7 +446,11 @@ struct OfflineBackend: StorBackend {
     func restoreSession() async throws -> AuthSession? { throw BackendError.server(500) }
     func createGoal(_ goal: Goal) async throws { throw BackendError.server(500) }
     func setEnvelopeBudget(ledger: Ledger, name: String, budget: Double) async throws { throw BackendError.server(500) }
-    func createBill(_ bill: Bill) async throws { throw BackendError.server(500) }
+    func saveBill(_ bill: Bill) async throws { throw BackendError.server(500) }
+    func deleteBill(id: String) async throws { throw BackendError.server(500) }
+    func loadPlan(month: String) async throws -> BudgetPlan { throw BackendError.server(500) }
+    func setTransfer(month: String, key: String, done: Bool) async throws { throw BackendError.server(500) }
+    func saveBudget(_ settings: BudgetSettings) async throws { throw BackendError.server(500) }
     func setLinkedAccounts(_ ids: Set<String>) async throws { throw BackendError.server(500) }
     func setTopUpDay(_ day: Int) async throws { throw BackendError.server(500) }
     func setHouseholdSize(_ size: Int) async throws { throw BackendError.server(409) }

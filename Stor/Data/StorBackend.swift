@@ -48,7 +48,11 @@ protocol StorBackend: Sendable {
     func setGoalMonthly(id: String, monthly: Double) async throws
     func createGoal(_ goal: Goal) async throws
     func setEnvelopeBudget(ledger: Ledger, name: String, budget: Double) async throws
-    func createBill(_ bill: Bill) async throws
+    func saveBill(_ bill: Bill) async throws
+    func deleteBill(id: String) async throws
+    func loadPlan(month: String) async throws -> BudgetPlan
+    func setTransfer(month: String, key: String, done: Bool) async throws
+    func saveBudget(_ settings: BudgetSettings) async throws
     func setLinkedAccounts(_ ids: Set<String>) async throws
     func setTopUpDay(_ day: Int) async throws
     func setHouseholdSize(_ size: Int) async throws
@@ -59,6 +63,7 @@ protocol StorBackend: Sendable {
 /// shortcut: any password signs in, replace with HTTPBackend once the API is deployed.
 struct LocalBackend: StorBackend {
     var snapshot: HouseholdSnapshot = .empty
+    var plan: BudgetPlan?
 
     func signIn(email: String, password: String) async throws -> AuthSession {
         AuthSession(email: email, hasCompletedSetup: true)
@@ -77,7 +82,11 @@ struct LocalBackend: StorBackend {
     func setGoalMonthly(id: String, monthly: Double) async throws {}
     func createGoal(_ goal: Goal) async throws {}
     func setEnvelopeBudget(ledger: Ledger, name: String, budget: Double) async throws {}
-    func createBill(_ bill: Bill) async throws {}
+    func saveBill(_ bill: Bill) async throws {}
+    func deleteBill(id: String) async throws {}
+    func loadPlan(month: String) async throws -> BudgetPlan { plan ?? .empty(month: month) }
+    func setTransfer(month: String, key: String, done: Bool) async throws {}
+    func saveBudget(_ settings: BudgetSettings) async throws {}
     func setLinkedAccounts(_ ids: Set<String>) async throws {}
     func setTopUpDay(_ day: Int) async throws {}
     func setHouseholdSize(_ size: Int) async throws {}
@@ -91,7 +100,7 @@ enum BackendConfig {
         #if DEBUG
         let process = ProcessInfo.processInfo
         if process.arguments.contains("-useFixtures") {
-            return LocalBackend(snapshot: MockData.snapshot)
+            return LocalBackend(snapshot: MockData.snapshot, plan: MockData.plan)
         }
         if let url = process.environment["STOR_API_URL"].flatMap(URL.init(string:)) {
             return HTTPBackend(baseURL: url)

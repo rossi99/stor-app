@@ -22,6 +22,7 @@ actor HTTPBackend: StorBackend {
     private struct HouseholdSize: Encodable { let size: Int }
     private struct EnvelopeBudget: Encodable { let name: String; let budget: Double }
     private struct InviteCode: Encodable { let code: String }
+    private struct TransferTick: Encodable { let month: String; let key: String; let done: Bool }
     private struct Empty: Encodable {}
 
     func signIn(email: String, password: String) async throws -> AuthSession {
@@ -92,8 +93,29 @@ actor HTTPBackend: StorBackend {
         _ = try await send("PUT", "ledgers/\(ledger.rawValue)/envelopes", EnvelopeBudget(name: name, budget: budget))
     }
 
-    func createBill(_ bill: Bill) async throws {
-        _ = try await send("POST", "bills", bill)
+    func saveBill(_ bill: Bill) async throws {
+        _ = try await send("PUT", "bills/\(Self.pathSegment(bill.id))", bill)
+    }
+
+    func deleteBill(id: String) async throws {
+        _ = try await send("DELETE", "bills/\(Self.pathSegment(id))", Empty?.none)
+    }
+
+    func loadPlan(month: String) async throws -> BudgetPlan {
+        let data = try await send("GET", "plan", Empty?.none, query: [URLQueryItem(name: "month", value: month)])
+        return try Self.decoder.decode(BudgetPlan.self, from: data)
+    }
+
+    func setTransfer(month: String, key: String, done: Bool) async throws {
+        _ = try await send("PUT", "plan/transfers", TransferTick(month: month, key: key, done: done))
+    }
+
+    func saveBudget(_ settings: BudgetSettings) async throws {
+        _ = try await send("PUT", "household/budget", settings)
+    }
+
+    private static func pathSegment(_ id: String) -> String {
+        id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed.subtracting(["/"])) ?? id
     }
 
     func setLinkedAccounts(_ ids: Set<String>) async throws {
@@ -125,8 +147,10 @@ actor HTTPBackend: StorBackend {
     }
 
     private func send(_ method: String, _ path: String, _ body: (some Encodable)?,
-                      bearer: String? = nil) async throws -> Data {
-        var request = URLRequest(url: baseURL.appending(path: path))
+                      bearer: String? = nil, query: [URLQueryItem] = []) async throws -> Data {
+        var url = baseURL.appending(path: path)
+        if !query.isEmpty { url.append(queryItems: query) }
+        var request = URLRequest(url: url)
         request.httpMethod = method
         if let token = bearer ?? token { request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
         if let body {

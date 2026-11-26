@@ -75,6 +75,8 @@ final class AppState {
 
     var isAuthenticated = false
     var isAuthenticating = false
+    /// Checking a stored session at launch, before showing the sign-in gate.
+    var isRestoring = false
     var authError: String?
     var userEmail = ""
     var hasCompletedSetup = false
@@ -466,17 +468,29 @@ final class AppState {
         authError = nil
         defer { isAuthenticating = false }
         do {
-            let session = try await call(backend)
-            userEmail = session.email
-            hasCompletedSetup = session.hasCompletedSetup
-            onboardingStep = 0
-            loadState = .loading
-            isAuthenticated = true
-            await loadHousehold()
+            await begin(try await call(backend))
         } catch {
             authError = (error as? BackendError)?.message
                 ?? "Couldn’t reach Stór. Check your connection and try again."
         }
+    }
+
+    /// Picks up a session saved on an earlier launch. Any failure leaves the sign-in gate showing.
+    func restoreSession() async {
+        isRestoring = true
+        defer { isRestoring = false }
+        if let session = try? await backend.restoreSession() {
+            await begin(session)
+        }
+    }
+
+    private func begin(_ session: AuthSession) async {
+        userEmail = session.email
+        hasCompletedSetup = session.hasCompletedSetup
+        onboardingStep = 0
+        loadState = .loading
+        isAuthenticated = true
+        await loadHousehold()
     }
 
     /// Clears everything the account loaded; the server revoke is best-effort.

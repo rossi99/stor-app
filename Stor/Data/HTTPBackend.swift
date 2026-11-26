@@ -1,14 +1,17 @@
 import Foundation
 
-/// JSON over HTTPS. The token lives in memory only, so a relaunch signs out.
+/// JSON over HTTPS. The token is kept in `tokens`, so a relaunch stays signed in until it expires.
 actor HTTPBackend: StorBackend {
     private let baseURL: URL
     private let session: URLSession
+    private let tokens: any TokenStore
     private var token: String?
 
-    init(baseURL: URL, session: URLSession = .shared) {
+    init(baseURL: URL, session: URLSession = .shared, tokens: any TokenStore = KeychainTokenStore()) {
         self.baseURL = baseURL
         self.session = session
+        self.tokens = tokens
+        token = tokens.load()
     }
 
     private struct Credentials: Encodable { let email, password: String }
@@ -31,8 +34,14 @@ actor HTTPBackend: StorBackend {
     /// Forgets the token first, so a failed revoke still signs the device out.
     func signOut() async throws {
         guard let current = token else { return }
-        token = nil
+        remember(nil)
         _ = try await send("POST", "auth/sign-out", Empty?.none, bearer: current)
+    }
+
+    /// The stored session, if its token is still good; nil when there is none to check.
+    func restoreSession() async throws -> AuthSession? {
+        guard token != nil else { return nil }
+        return try Self.decoder.decode(AuthSession.self, from: try await send("GET", "auth/session", Empty?.none))
     }
 
     func loadHousehold() async throws -> HouseholdSnapshot {
@@ -84,8 +93,13 @@ actor HTTPBackend: StorBackend {
     private func authenticate(_ path: String, email: String, password: String) async throws -> AuthSession {
         let data = try await send("POST", path, Credentials(email: email, password: password))
         let session = try Self.decoder.decode(AuthSession.self, from: data)
-        token = session.token
+        remember(session.token)
         return session
+    }
+
+    private func remember(_ newToken: String?) {
+        token = newToken
+        tokens.save(newToken)
     }
 
     private func send(_ method: String, _ path: String, _ body: (some Encodable)?,
@@ -101,7 +115,10 @@ actor HTTPBackend: StorBackend {
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         switch status {
         case 200..<300: return data
-        case 401: throw BackendError.invalidCredentials
+        case 401:
+            // The server no longer accepts this token, so stop keeping it.
+            if bearer == nil, token != nil { remember(nil) }
+            throw BackendError.invalidCredentials
         case 409: throw BackendError.emailTaken
         default: throw BackendError.server(status)
         }

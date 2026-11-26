@@ -23,6 +23,7 @@ protocol StorBackend: Sendable {
     func signIn(email: String, password: String) async throws -> AuthSession
     func signUp(email: String, password: String) async throws -> AuthSession
     func signOut() async throws
+    func restoreSession() async throws -> AuthSession?
     func loadHousehold() async throws -> HouseholdSnapshot
     func addSpend(_ spend: Transaction) async throws
     func saveContributions(_ contributions: [Ledger: Double]) async throws
@@ -48,6 +49,7 @@ struct LocalBackend: StorBackend {
         AuthSession(email: email, hasCompletedSetup: false)
     }
     func signOut() async throws {}
+    func restoreSession() async throws -> AuthSession? { nil }
     func loadHousehold() async throws -> HouseholdSnapshot { snapshot }
     func addSpend(_ spend: Transaction) async throws {}
     func saveContributions(_ contributions: [Ledger: Double]) async throws {}

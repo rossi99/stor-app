@@ -253,16 +253,29 @@ struct ModelRegressionTests {
         expect(offline.loadState == .failed && offline.snapshot.name == name, "A failed load is not an empty household")
         await offline.signIn(email: "a@b.c", password: "secret")
         expect(!offline.isAuthenticated && offline.authError == BackendError.server(500).message, "A failed sign-in stays on the gate")
+        await offline.restoreSession()
+        expect(!offline.isAuthenticated && !offline.isRestoring, "A session that can't be checked leaves the sign-in gate")
         let local = AppState()
+        await local.restoreSession()
+        expect(!local.isAuthenticated && !local.isRestoring, "Nothing saved means signing in")
         await local.signUp(email: "a@b.c", password: "password1")
         expect(local.isAuthenticated && !local.hasCompletedSetup && local.loadState == .loaded, "Sign-up continues into setup")
 
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [StubProtocol.self]
-        let http = HTTPBackend(baseURL: URL(string: "https://stor.test/v1")!, session: URLSession(configuration: configuration))
+        let tokens = MemoryTokenStore()
+        let http = HTTPBackend(baseURL: URL(string: "https://stor.test/v1")!, session: URLSession(configuration: configuration), tokens: tokens)
+        let nothing = try! await http.restoreSession()
+        expect(nothing == nil, "With no saved token there is nothing to restore")
         StubProtocol.body = Data(#"{"email":"a@b.c","hasCompletedSetup":true,"token":"abc"}"#.utf8)
         let session = try! await http.signIn(email: "a@b.c", password: "secret")
         expect(session.hasCompletedSetup && StubProtocol.last?.url?.path == "/v1/auth/sign-in", "Sign-in posts to the contract path")
+        expect(tokens.token == "abc", "Sign-in keeps the token for the next launch")
+        let relaunched = HTTPBackend(baseURL: URL(string: "https://stor.test/v1")!, session: URLSession(configuration: configuration), tokens: tokens)
+        StubProtocol.body = Data(#"{"email":"a@b.c","hasCompletedSetup":true}"#.utf8)
+        let restored = try! await relaunched.restoreSession()
+        expect(restored?.email == "a@b.c" && StubProtocol.last?.url?.path == "/v1/auth/session"
+               && StubProtocol.last?.value(forHTTPHeaderField: "Authorization") == "Bearer abc", "A relaunch checks the saved token")
         expect(StubProtocol.last?.url?.query == nil, "Credentials never travel in the URL")
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
@@ -284,6 +297,10 @@ struct ModelRegressionTests {
             }
         }
         StubProtocol.status = 200
+        expect(tokens.token == nil, "A rejected token is forgotten")
+        StubProtocol.body = Data(#"{"email":"a@b.c","hasCompletedSetup":true,"token":"abc"}"#.utf8)
+        _ = try! await http.signIn(email: "a@b.c", password: "secret")
+        StubProtocol.body = try! encoder.encode(HouseholdSnapshot.empty)
         var bodies: [String: Data] = [:]
         StubProtocol.onRequest = { request in
             let body = request.httpBodyStream.map { stream -> Data in
@@ -309,6 +326,7 @@ struct ModelRegressionTests {
         try! await http.signOut()
         expect(StubProtocol.last?.url?.path == "/v1/auth/sign-out"
                && StubProtocol.last?.value(forHTTPHeaderField: "Authorization") == "Bearer abc", "Sign-out revokes the current token")
+        expect(tokens.token == nil, "Sign-out forgets the saved token")
         _ = try! await http.loadHousehold()
         expect(StubProtocol.last?.value(forHTTPHeaderField: "Authorization") == nil, "Signed-out requests carry no token")
         print("Passed \(checks) model regression checks")
@@ -323,6 +341,7 @@ struct OfflineBackend: StorBackend {
     func saveContributions(_ contributions: [Ledger: Double]) async throws { throw BackendError.server(500) }
     func setGoalMonthly(id: String, monthly: Double) async throws { throw BackendError.server(500) }
     func signOut() async throws { throw BackendError.server(500) }
+    func restoreSession() async throws -> AuthSession? { throw BackendError.server(500) }
     func createGoal(_ goal: Goal) async throws { throw BackendError.server(500) }
     func setEnvelopeBudget(ledger: Ledger, name: String, budget: Double) async throws { throw BackendError.server(500) }
     func createBill(_ bill: Bill) async throws { throw BackendError.server(500) }
@@ -330,6 +349,12 @@ struct OfflineBackend: StorBackend {
     func setTopUpDay(_ day: Int) async throws { throw BackendError.server(500) }
     func setHouseholdSize(_ size: Int) async throws { throw BackendError.server(409) }
     func completeSetup() async throws { throw BackendError.server(500) }
+}
+
+final class MemoryTokenStore: TokenStore, @unchecked Sendable {
+    var token: String?
+    func load() -> String? { token }
+    func save(_ token: String?) { self.token = token }
 }
 
 final class StubProtocol: URLProtocol {

@@ -8,7 +8,7 @@ struct HouseholdView: View {
     @State private var showsSignOut = false
 
     private enum Editor: Identifiable, Hashable {
-        case contributions, accounts, invite
+        case contributions, accounts, invite, budget
         case member(Ledger)
 
         var id: String {
@@ -16,6 +16,7 @@ struct HouseholdView: View {
             case .contributions: "contributions"
             case .accounts: "accounts"
             case .invite: "invite"
+            case .budget: "budget"
             case .member(let ledger): "member.\(ledger.rawValue)"
             }
         }
@@ -52,6 +53,11 @@ struct HouseholdView: View {
                     }
                     Button { editor = .accounts } label: {
                         settingLink("Linked accounts", value: appState.linkedAccounts.isEmpty ? "None yet" : "\(appState.linkedAccounts.count)")
+                    }
+                    Button { editor = .budget } label: {
+                        let s = appState.plan.settings
+                        settingLink("Budget settings", value: "\(s.essentialPct)/\(s.discretionaryPct)/\(s.savingPct)"
+                                    + (s.cashCap.map { " · cash capped at \(money($0))" } ?? ""))
                     }
                     Picker("Planned top-up day", selection: $state.topUpDay) {
                         ForEach(1...28, id: \.self) { day in Text("Day \(day)").tag(day) }
@@ -92,6 +98,8 @@ struct HouseholdView: View {
                 ContributionSettingsSheet(members: appState.members)
             case .invite:
                 InviteSheet()
+            case .budget:
+                BudgetSettingsSheet(settings: appState.plan.settings)
             case .member(let ledger):
                 MemberSheet(member: appState.member(ledger))
             case .accounts:

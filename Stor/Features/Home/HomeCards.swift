@@ -29,6 +29,33 @@ struct EnvelopeSummaryCard: View {
     }
 }
 
+/// This month's cash each and how far through the payday transfers you are.
+struct PlanPreviewCard: View {
+    @Environment(AppState.self) private var appState
+    @Environment(\.money) private var money
+
+    var body: some View {
+        let plan = appState.plan
+        let done = plan.transfers.filter(\.done).count
+        NavigationLink(value: Route.plan) {
+            LabelledCard(label: "Payday plan",
+                         trailingText: plan.transfers.isEmpty ? nil : "\(done) of \(plan.transfers.count) done") {
+                if plan.income == 0 && plan.bills.isEmpty {
+                    EmptyCardNote(text: "Add take-home pay and bills to see what each of you keeps this month.")
+                } else {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("\(money(plan.cashEach)) each").storDisplay(22).foregroundStyle(Color.storInk)
+                        Text("after \(money(plan.billsAndPots)) of bills and pots and \(money(plan.invested)) invested")
+                            .storText(13).foregroundStyle(Color.storSecondaryLabel)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+    }
+}
+
 /// The three bills nearest to leaving the pot.
 struct BillsPreviewCard: View {
     @Environment(AppState.self) private var appState

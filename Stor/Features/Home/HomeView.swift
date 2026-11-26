@@ -28,6 +28,7 @@ struct HomeView: View {
                     )
 
                     EnvelopeSummaryCard()
+                    PlanPreviewCard()
                     BillsPreviewCard()
                     LatestCard()
                     statTiles

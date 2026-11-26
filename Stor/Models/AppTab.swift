@@ -29,5 +29,5 @@ enum AppTab: String, CaseIterable, Identifiable, Hashable, Sendable {
 
 /// Screens pushed on top of a tab rather than owning one.
 enum Route: Hashable, Sendable {
-    case bills, alerts, household, recap
+    case bills, alerts, household, recap, plan
 }

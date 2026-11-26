@@ -16,6 +16,8 @@ actor HTTPBackend: StorBackend {
     private struct Monthly: Encodable { let monthly: Double }
     private struct AccountIDs: Encodable { let ids: [String] }
     private struct TopUpDay: Encodable { let day: Int }
+    private struct HouseholdSize: Encodable { let size: Int }
+    private struct EnvelopeBudget: Encodable { let name: String; let budget: Double }
     private struct Empty: Encodable {}
 
     func signIn(email: String, password: String) async throws -> AuthSession {
@@ -24,6 +26,13 @@ actor HTTPBackend: StorBackend {
 
     func signUp(email: String, password: String) async throws -> AuthSession {
         try await authenticate("auth/sign-up", email: email, password: password)
+    }
+
+    /// Forgets the token first, so a failed revoke still signs the device out.
+    func signOut() async throws {
+        guard let current = token else { return }
+        token = nil
+        _ = try await send("POST", "auth/sign-out", Empty?.none, bearer: current)
     }
 
     func loadHousehold() async throws -> HouseholdSnapshot {
@@ -44,12 +53,28 @@ actor HTTPBackend: StorBackend {
         _ = try await send("PUT", "goals/\(goal)/monthly", Monthly(monthly: monthly))
     }
 
+    func createGoal(_ goal: Goal) async throws {
+        _ = try await send("POST", "goals", goal)
+    }
+
+    func setEnvelopeBudget(ledger: Ledger, name: String, budget: Double) async throws {
+        _ = try await send("PUT", "ledgers/\(ledger.rawValue)/envelopes", EnvelopeBudget(name: name, budget: budget))
+    }
+
+    func createBill(_ bill: Bill) async throws {
+        _ = try await send("POST", "bills", bill)
+    }
+
     func setLinkedAccounts(_ ids: Set<String>) async throws {
         _ = try await send("PUT", "household/linked-accounts", AccountIDs(ids: ids.sorted()))
     }
 
     func setTopUpDay(_ day: Int) async throws {
         _ = try await send("PUT", "household/top-up-day", TopUpDay(day: day))
+    }
+
+    func setHouseholdSize(_ size: Int) async throws {
+        _ = try await send("PUT", "household/size", HouseholdSize(size: size))
     }
 
     func completeSetup() async throws {
@@ -63,10 +88,11 @@ actor HTTPBackend: StorBackend {
         return session
     }
 
-    private func send(_ method: String, _ path: String, _ body: (some Encodable)?) async throws -> Data {
+    private func send(_ method: String, _ path: String, _ body: (some Encodable)?,
+                      bearer: String? = nil) async throws -> Data {
         var request = URLRequest(url: baseURL.appending(path: path))
         request.httpMethod = method
-        if let token { request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
+        if let token = bearer ?? token { request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
         if let body {
             request.httpBody = try Self.encoder.encode(body)
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")

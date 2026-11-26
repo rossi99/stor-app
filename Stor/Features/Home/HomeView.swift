@@ -106,7 +106,7 @@ struct HomeView: View {
         @Bindable var state = appState
 
         return SegmentedPill(
-            options: Ledger.displayOrder,
+            options: appState.ledgers,
             selection: $state.ledger,
             label: { appState.name(for: $0) },
             dot: { $0.accent }

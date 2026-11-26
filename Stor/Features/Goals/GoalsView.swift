@@ -2,6 +2,7 @@ import SwiftUI
 
 struct GoalsView: View {
     @Environment(AppState.self) private var appState
+    @State private var showsNewGoal = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -16,6 +17,8 @@ struct GoalsView: View {
                     Label("No shared goals yet", systemImage: "target")
                 } description: {
                     Text("Goals you’re saving for together will show here, with what’s saved and when you’ll get there.")
+                } actions: {
+                    CreateButton(title: "Add a goal") { showsNewGoal = true }
                 }
             } else {
             ScrollView {
@@ -27,6 +30,8 @@ struct GoalsView: View {
                     if let fund = appState.snapshot.emergencyFund {
                         emergencyFund(fund)
                     }
+
+                    CreateButton(title: "Add a goal") { showsNewGoal = true }
                 }
                 .screenInset()
                 .padding(.bottom, Spacing.xl)
@@ -35,6 +40,7 @@ struct GoalsView: View {
             }
         }
         .background(Color.storBackground)
+        .sheet(isPresented: $showsNewGoal) { NewGoalSheet() }
     }
 
     private func emergencyFund(_ fund: EmergencyFund) -> some View {
@@ -89,11 +95,13 @@ struct GoalCard: View {
 
             contribution
 
-            Text(goal.note)
-                .storText(12.5)
-                .lineSpacing(2)
-                .foregroundStyle(Color.storSecondaryLabel)
-                .padding(.top, Spacing.md)
+            if !goal.note.isEmpty {
+                Text(goal.note)
+                    .storText(12.5)
+                    .lineSpacing(2)
+                    .foregroundStyle(Color.storSecondaryLabel)
+                    .padding(.top, Spacing.md)
+            }
         }
         .padding(Spacing.lg + 2)
         .frame(maxWidth: .infinity, alignment: .leading)

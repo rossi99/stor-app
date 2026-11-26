@@ -6,7 +6,9 @@ struct LedgerView: View {
     @Environment(\.money) private var money
 
     /// `nil` is the "All" chip.
-    private let filters: [Ledger?] = [nil, .joint, .you, .partner]
+    private var filters: [Ledger?] {
+        [nil, .joint] + appState.ledgers.filter { $0 != .joint }
+    }
 
     var body: some View {
         @Bindable var state = appState

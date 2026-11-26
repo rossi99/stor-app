@@ -6,6 +6,7 @@ struct BillsView: View {
     @Environment(\.money) private var money
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var typeSize
+    @State private var showsNewBill = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -16,6 +17,8 @@ struct BillsView: View {
                     Label("No bills yet", systemImage: "calendar")
                 } description: {
                     Text("Shared bills will show here before they leave the pot.")
+                } actions: {
+                    CreateButton(title: "Add a bill") { showsNewBill = true }
                 }
             } else {
             ScrollView {
@@ -27,6 +30,8 @@ struct BillsView: View {
                             row(bill, isFirst: index == 0)
                         }
                     }
+
+                    CreateButton(title: "Add a bill") { showsNewBill = true }
                 }
                 .screenInset()
                 .padding(.top, Spacing.xxs)
@@ -38,6 +43,7 @@ struct BillsView: View {
         .background(Color.storBackground)
         .navigationBarBackButtonHidden()
         .toolbar(.hidden, for: .navigationBar)
+        .sheet(isPresented: $showsNewBill) { NewBillSheet() }
     }
 
     private func row(_ bill: Bill, isFirst: Bool) -> some View {
@@ -57,7 +63,9 @@ struct BillsView: View {
                         .storText(14.5)
                         .tracking(-0.116)
                         .foregroundStyle(Color.storInk)
-                    MonoText(bill.meta, size: 11, color: .storTertiaryLabel)
+                    if !bill.meta.isEmpty {
+                        MonoText(bill.meta, size: 11, color: .storTertiaryLabel)
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -96,7 +104,8 @@ struct BillCalendar: View {
             }
 
             LazyVGrid(columns: columns, spacing: Spacing.xxs) {
-                ForEach(0..<month.startOffset, id: \.self) { _ in
+                // Negative ids so the leading blanks can't collide with day numbers.
+                ForEach(-month.startOffset..<0, id: \.self) { _ in
                     Color.clear.frame(height: 40).accessibilityHidden(true)
                 }
                 ForEach(1...month.daysInMonth, id: \.self) { day in

@@ -4,6 +4,7 @@ import SwiftUI
 struct BudgetView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.money) private var money
+    @State private var showsNewEnvelope = false
 
     var body: some View {
         @Bindable var state = appState
@@ -13,7 +14,7 @@ struct BudgetView: View {
                 ScreenTitle("\(appState.month.monthName) envelopes")
 
                 SegmentedPill(
-                    options: Ledger.displayOrder,
+                    options: appState.ledgers,
                     selection: $state.ledger,
                     height: 32,
                     label: { appState.name(for: $0) }
@@ -30,6 +31,7 @@ struct BudgetView: View {
                 } description: {
                     Text("Spending you add to \(appState.name(for: appState.ledger)) will show here by category.")
                 } actions: {
+                    newEnvelopeButton
                     AddSpendButton(ledger: appState.ledger)
                 }
             } else {
@@ -53,6 +55,9 @@ struct BudgetView: View {
                     }
 
                     unbudgeted
+
+                    newEnvelopeButton
+                        .padding(.top, Spacing.lg)
                 }
                 .screenInset()
                 .padding(.top, Spacing.xs)
@@ -62,6 +67,15 @@ struct BudgetView: View {
             }
         }
         .background(Color.storBackground)
+        .sheet(isPresented: $showsNewEnvelope) {
+            NewEnvelopeSheet(categories: appState.unbudgetedCategories)
+        }
+    }
+
+    @ViewBuilder private var newEnvelopeButton: some View {
+        if !appState.unbudgetedCategories.isEmpty {
+            CreateButton(title: "Add envelope") { showsNewEnvelope = true }
+        }
     }
 
     private var totals: some View {

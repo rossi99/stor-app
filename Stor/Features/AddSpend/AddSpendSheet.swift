@@ -67,7 +67,7 @@ struct AddSpendSheet: View {
                         Text("Paid from").storText(15, weight: .medium)
                         Menu {
                             Picker("Paid from", selection: $state.draft.ledger) {
-                                ForEach(Ledger.displayOrder) { ledger in
+                                ForEach(appState.ledgers) { ledger in
                                     Text(accountName(ledger)).tag(ledger)
                                 }
                             }

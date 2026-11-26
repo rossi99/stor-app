@@ -81,6 +81,8 @@ enum MockData {
                 Envelope(name: "Gifts",           spent:  35, budget:  60, detail: "Sam's mum",      pace: "42% left"),
                 Envelope(name: "Unallocated",     spent:  80, budget: 200, detail: "No envelope",    pace: "—"),
             ]
+        case .third, .fourth:
+            envelopes = []
         case .partner:
             envelopes = [
                 Envelope(name: "Cycling",         spent: 214, budget: 180, detail: "New wheelset", pace: "over by 19%"),

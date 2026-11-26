@@ -36,6 +36,9 @@ struct OnboardingView: View {
             .background(Color.storBackground)
             .toolbar(.hidden, for: .navigationBar)
             .animation(.easeInOut(duration: 0.25), value: appState.onboardingStep)
+            .onChange(of: appState.members.map(\.ledger)) {
+                contributions = ContributionDraft(members: appState.members)
+            }
             .onAppear {
                 if !hasLoadedContributions {
                     contributions = ContributionDraft(members: appState.members)

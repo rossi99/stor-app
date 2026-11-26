@@ -45,9 +45,12 @@ struct BillsPreviewCard: View {
 
     var body: some View {
         if upcoming.isEmpty {
-            LabelledCard(label: "Upcoming shared bills") {
-                EmptyCardNote(text: "No bills due. Shared bills will show here before they leave the pot.")
+            NavigationLink(value: Route.bills) {
+                LabelledCard(label: "Upcoming shared bills") {
+                    EmptyCardNote(text: "No bills due. Add your shared bills so they show here before they leave the pot.")
+                }
             }
+            .buttonStyle(.plain)
         } else {
             billsCard
         }

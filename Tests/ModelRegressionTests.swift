@@ -121,6 +121,30 @@ struct ModelRegressionTests {
         expect(contributions.entries[.you] == "1.234", "Steppers do not silently replace invalid input")
         expect(!state.saveContributions(ContributionDraft(members: [])), "A mismatched household draft cannot save")
 
+        let household = AppState()
+        expect(household.householdSize == 2 && household.ledgers == [.you, .joint, .partner], "A new household is two people")
+        household.ledger = .partner
+        household.householdSize = 4
+        expect(household.ledgers == [.you, .joint, .partner, .third, .fourth], "Growing adds ledgers in household order")
+        expect(household.householdSummary == "Four personal accounts + one joint pot", "Summary counts the people")
+        household.openAddSpend(for: .joint)
+        expect(!household.draft.showsSplit && household.draft.asTransaction().splitPercent == nil, "No you/partner split beyond two people")
+        household.cancelAddSpend()
+        household.householdSize = 5
+        expect(household.householdSize == 4, "More than four people is refused")
+        household.feedFilter = .fourth
+        household.householdSize = 1
+        expect(household.ledgers == [.you, .joint] && household.members.map(\.ledger) == [.you], "A household of one keeps only you and the pot")
+        expect(household.ledger == .joint && household.feedFilter == nil, "Selections on a removed ledger fall back")
+        expect(household.householdSummary == "One personal account + one joint pot", "Summary is singular for one")
+        household.ledger = .you
+        household.openAddSpend()
+        household.draft.entry = "5"
+        household.commitSpend()
+        expect(household.safeToSpend.caption == "Personal allowance.", "Nobody else to see a solo allowance")
+        household.householdSize = 0
+        expect(household.householdSize == 1, "Fewer than one person is refused")
+
         let empty = AppState()
         expect(empty.safeToSpend.isEmpty && empty.envelopes.isEmpty && empty.upcomingBills.isEmpty, "A new household has nothing to show")
         expect(empty.recap == nil && empty.snapshot.netWorth == nil, "A new household has no recap or net worth")
@@ -133,6 +157,54 @@ struct ModelRegressionTests {
         empty.commitSpend()
         expect(empty.envelopes.first?.name == "Groceries" && empty.envelopes.first?.budget == 0, "First spend creates an unbudgeted envelope")
         expect(empty.transactionGroups.first?.label.hasPrefix("Today · ") == true, "A new spend groups under today")
+
+        var goalDraft = GoalDraft(name: "  House deposit ", target: "20000", saved: "", monthly: "250")
+        expect(goalDraft.goal()?.name == "House deposit" && goalDraft.goal()?.saved == 0, "A goal trims its name and starts from nothing")
+        for (target, monthly) in [("0", "250"), ("", "250"), ("abc", "250"), ("20000", ""), ("20000", "-5")] {
+            expect(GoalDraft(name: "Car", target: target, monthly: monthly).goal() == nil, "Reject goal \(target)/\(monthly)")
+        }
+        expect(GoalDraft(name: "  ", target: "100", monthly: "50").goal() == nil, "A goal needs a name")
+        expect(!GoalDraft().hasContent && GoalDraft(target: "1").hasContent, "Any typed goal field is protected")
+        expect(empty.createGoal(goalDraft) && empty.goals.count == 1 && empty.goals[0].monthsToGo == 80, "A valid goal is added")
+        goalDraft.target = "0"
+        expect(!empty.createGoal(goalDraft) && empty.goals.count == 1, "An invalid goal never saves")
+
+        empty.ledger = .joint
+        expect(empty.unbudgetedCategories == SpendDraft.categories, "A new ledger can budget every category")
+        expect(!empty.createEnvelope(EnvelopeDraft(category: "Groceries", budget: "0")), "A zero budget is rejected")
+        expect(!empty.createEnvelope(EnvelopeDraft(category: "Pets", budget: "50")), "Only spend categories become envelopes")
+        expect(empty.createEnvelope(EnvelopeDraft(category: "Groceries", budget: "300")), "An envelope saves on an empty ledger")
+        expect(empty.envelopes.count == 1 && empty.envelopes[0].budget == 300 && close(empty.envelopes[0].spent, 12),
+               "A new budget absorbs earlier unbudgeted spending")
+        expect(close(empty.leftTotal, 288) && !empty.unbudgetedCategories.contains("Groceries"), "Budgeted categories leave the picker")
+        expect(!empty.createEnvelope(EnvelopeDraft(category: "Groceries", budget: "10")), "A category cannot be budgeted twice")
+        empty.ledger = .you
+        expect(empty.envelopes.isEmpty && empty.unbudgetedCategories.contains("Groceries"), "Envelopes belong to one ledger")
+        expect(empty.createEnvelope(EnvelopeDraft(category: "Transport", budget: "80")) && empty.envelopes.count == 1, "A personal envelope saves")
+        empty.ledger = .joint
+        expect(empty.envelopes.count == 1, "A personal envelope stays out of the pot")
+
+        var utc = Calendar(identifier: .gregorian)
+        utc.timeZone = .gmt
+        let late = Calendar(identifier: .gregorian).date(from: DateComponents(year: 2026, month: 11, day: 20, hour: 23, minute: 30))!
+        let billDue = BillDraft(dueDay: late).dueDate
+        expect(utc.dateComponents([.day, .hour], from: billDue) == DateComponents(day: 20, hour: 12), "Bills are sent as noon UTC on the chosen day")
+        expect(BillDraft(name: "Rent", amount: "0").bill() == nil && BillDraft(name: "", amount: "5").bill() == nil, "A bill needs a name and an amount")
+        let later = empty.month.adding(days: 3)
+        expect(empty.createBill(BillDraft(name: "Council tax", amount: "180", dueDay: later)), "A valid bill saves")
+        expect(empty.createBill(BillDraft(name: "Water", amount: "40", dueDay: empty.month.date, isEstimated: true)), "An estimated bill saves")
+        expect(empty.snapshot.bills.map(\.name) == ["Water", "Council tax"], "Bills stay in due-date order")
+        expect(empty.snapshot.bills[0].meta == "Estimated" && empty.snapshot.bills[1].meta.isEmpty, "Only estimates are labelled")
+        expect(empty.upcomingBills.count == 2, "A bill due today is still upcoming")
+
+        await empty.signUp(email: "a@b.c", password: "password1")
+        empty.createGoal(GoalDraft(name: "Car", target: "10", monthly: "1"))
+        empty.selectedTab = .goals
+        empty.feedFilter = .you
+        empty.signOut()
+        expect(!empty.isAuthenticated && empty.userEmail.isEmpty && !empty.hasCompletedSetup, "Sign-out returns to the gate")
+        expect(empty.snapshot == .empty && empty.goals.isEmpty && empty.allTransactions.isEmpty, "Sign-out leaves nothing from the account")
+        expect(empty.selectedTab == .home && empty.feedFilter == nil && empty.ledger == .joint, "The next account starts at home")
 
         func settle(_ condition: () -> Bool) async {
             for _ in 0..<200 where !condition() { try? await Task.sleep(nanoseconds: 5_000_000) }
@@ -155,6 +227,27 @@ struct ModelRegressionTests {
         offline.saveContributions(refused)
         await settle { offline.syncError != nil }
         expect(close(offline.potContribution, pot), "Refused contributions roll back")
+        offline.syncError = nil
+        offline.householdSize = 1
+        await settle { offline.syncError != nil }
+        expect(offline.members.map(\.ledger) == [.you, .partner], "A refused household size rolls back")
+        offline.syncError = nil
+        let goalCount = offline.goals.count
+        offline.createGoal(GoalDraft(name: "Car", target: "5000", monthly: "100"))
+        await settle { offline.syncError != nil }
+        expect(offline.goals.count == goalCount, "A refused goal is removed")
+        offline.syncError = nil
+        offline.ledger = .partner
+        let category = offline.unbudgetedCategories[0]
+        let envelopeCount = offline.envelopes.count
+        offline.createEnvelope(EnvelopeDraft(category: category, budget: "50"))
+        await settle { offline.syncError != nil }
+        expect(offline.envelopes.count == envelopeCount && offline.unbudgetedCategories.contains(category), "A refused envelope is removed")
+        offline.syncError = nil
+        let billCount = offline.snapshot.bills.count
+        offline.createBill(BillDraft(name: "Gym", amount: "30"))
+        await settle { offline.syncError != nil }
+        expect(offline.snapshot.bills.count == billCount, "A refused bill is removed")
         let name = offline.snapshot.name
         await offline.loadHousehold()
         expect(offline.loadState == .failed && offline.snapshot.name == name, "A failed load is not an empty household")
@@ -190,6 +283,34 @@ struct ModelRegressionTests {
                 expect(error as? BackendError == expected, "A \(status) maps to its error")
             }
         }
+        StubProtocol.status = 200
+        var bodies: [String: Data] = [:]
+        StubProtocol.onRequest = { request in
+            let body = request.httpBodyStream.map { stream -> Data in
+                stream.open(); defer { stream.close() }
+                var data = Data(), buffer = [UInt8](repeating: 0, count: 4096)
+                while stream.hasBytesAvailable { let n = stream.read(&buffer, maxLength: buffer.count); if n <= 0 { break }; data.append(buffer, count: n) }
+                return data
+            } ?? request.httpBody ?? Data()
+            bodies["\(request.httpMethod!) \(request.url!.path)"] = body
+        }
+        try! await http.setHouseholdSize(3)
+        let sizeBody = try! JSONSerialization.jsonObject(with: bodies["PUT /v1/household/size"]!) as! [String: Any]
+        expect(sizeBody["size"] as? Int == 3, "Household size travels as {size}")
+        bodies = [:]
+        try! await http.createGoal(GoalDraft(name: "Car", target: "10", monthly: "1").goal(id: "g1")!)
+        try! await http.setEnvelopeBudget(ledger: .joint, name: "Home & repairs", budget: 120)
+        try! await http.createBill(BillDraft(name: "Rent", amount: "900", dueDay: late).bill(id: "b1")!)
+        expect(Set(bodies.keys) == ["POST /v1/goals", "PUT /v1/ledgers/joint/envelopes", "POST /v1/bills"], "Creates use the contract paths")
+        let envelopeBody = try! JSONSerialization.jsonObject(with: bodies["PUT /v1/ledgers/joint/envelopes"]!) as! [String: Any]
+        expect(envelopeBody["name"] as? String == "Home & repairs" && envelopeBody["budget"] as? Double == 120, "Envelope names travel in the body")
+        let billBody = try! JSONSerialization.jsonObject(with: bodies["POST /v1/bills"]!) as! [String: Any]
+        expect(billBody["id"] as? String == "b1" && billBody["dueDate"] as? String == "2026-11-20T12:00:00Z", "Bills carry their id and a noon UTC date")
+        try! await http.signOut()
+        expect(StubProtocol.last?.url?.path == "/v1/auth/sign-out"
+               && StubProtocol.last?.value(forHTTPHeaderField: "Authorization") == "Bearer abc", "Sign-out revokes the current token")
+        _ = try! await http.loadHousehold()
+        expect(StubProtocol.last?.value(forHTTPHeaderField: "Authorization") == nil, "Signed-out requests carry no token")
         print("Passed \(checks) model regression checks")
     }
 }
@@ -201,8 +322,13 @@ struct OfflineBackend: StorBackend {
     func addSpend(_ spend: Transaction) async throws { throw BackendError.server(500) }
     func saveContributions(_ contributions: [Ledger: Double]) async throws { throw BackendError.server(500) }
     func setGoalMonthly(id: String, monthly: Double) async throws { throw BackendError.server(500) }
+    func signOut() async throws { throw BackendError.server(500) }
+    func createGoal(_ goal: Goal) async throws { throw BackendError.server(500) }
+    func setEnvelopeBudget(ledger: Ledger, name: String, budget: Double) async throws { throw BackendError.server(500) }
+    func createBill(_ bill: Bill) async throws { throw BackendError.server(500) }
     func setLinkedAccounts(_ ids: Set<String>) async throws { throw BackendError.server(500) }
     func setTopUpDay(_ day: Int) async throws { throw BackendError.server(500) }
+    func setHouseholdSize(_ size: Int) async throws { throw BackendError.server(409) }
     func completeSetup() async throws { throw BackendError.server(500) }
 }
 
@@ -210,12 +336,14 @@ final class StubProtocol: URLProtocol {
     nonisolated(unsafe) static var body = Data()
     nonisolated(unsafe) static var status = 200
     nonisolated(unsafe) static var last: URLRequest?
+    nonisolated(unsafe) static var onRequest: (URLRequest) -> Void = { _ in }
 
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     override func stopLoading() {}
     override func startLoading() {
         Self.last = request
+        Self.onRequest(request)
         let response = HTTPURLResponse(url: request.url!, statusCode: Self.status, httpVersion: nil, headerFields: nil)!
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
         client?.urlProtocol(self, didLoad: Self.body)

@@ -5,6 +5,7 @@ struct HouseholdView: View {
     @Environment(\.money) private var money
     @Environment(\.dismiss) private var dismiss
     @State private var editor: Editor?
+    @State private var showsSignOut = false
 
     private enum Editor: String, Identifiable {
         case contributions, accounts
@@ -18,6 +19,9 @@ struct HouseholdView: View {
             BackHeader(title: "Household") { dismiss() }
             Form {
                 Section("Your household") {
+                    Picker("People in household", selection: $state.householdSize) {
+                        ForEach(1...4, id: \.self) { count in Text("\(count)").tag(count) }
+                    }
                     ForEach(appState.members) { member in
                         VStack(alignment: .leading, spacing: Spacing.xs) {
                             Text(member.displayName).font(.headline)
@@ -28,7 +32,7 @@ struct HouseholdView: View {
                     }
                 }
                 Section("Shared spending") {
-                    DisclosureGroup("Two personal accounts + one joint pot") {
+                    DisclosureGroup(appState.householdSummary) {
                         Text("Personal spending has its own budget. Shared costs come out of the joint pot, funded by your monthly contributions.")
                     }
                     Button { editor = .contributions } label: {
@@ -54,12 +58,22 @@ struct HouseholdView: View {
                 } footer: {
                     Text("Hide balances and transaction amounts on screen. The payslip check appears in your monthly recap.")
                 }
+                Section {
+                    Button("Sign out", role: .destructive) { showsSignOut = true }
+                        .frame(minHeight: 44)
+                } footer: {
+                    if !appState.userEmail.isEmpty { Text("Signed in as \(appState.userEmail)") }
+                }
             }
             .scrollContentBackground(.hidden)
         }
         .background(Color.storBackground)
         .navigationBarBackButtonHidden()
         .toolbar(.hidden, for: .navigationBar)
+        .confirmationDialog("Sign out of Stór?", isPresented: $showsSignOut, titleVisibility: .visible) {
+            Button("Sign out", role: .destructive) { appState.signOut() }
+            Button("Cancel", role: .cancel) { }
+        }
         .sheet(item: $editor) { selected in
             if selected == .contributions {
                 ContributionSettingsSheet(members: appState.members)

@@ -9,7 +9,7 @@ struct LedgerSummary: Codable, Equatable, Sendable {
     /// Bills still to leave this ledger this month.
     let committed: Double
     let unbudgeted: Double
-    let envelopes: [Envelope]
+    var envelopes: [Envelope]
 }
 
 struct NetWorthPoint: Codable, Equatable, Identifiable, Sendable {

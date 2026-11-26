@@ -120,6 +120,34 @@ final class AppState {
         set { snapshot.members = newValue }
     }
 
+    /// Ledgers in display order: you, the joint pot, then everyone else.
+    var ledgers: [Ledger] {
+        [.you, .joint] + members.map(\.ledger).filter { $0 != .you }
+    }
+
+    /// "Two personal accounts + one joint pot".
+    var householdSummary: String {
+        let count = ["One", "Two", "Three", "Four"][max(0, min(3, members.count - 1))]
+        return "\(count) personal account\(members.count == 1 ? "" : "s") + one joint pot"
+    }
+
+    /// People in the household, 1 to 4. The server refuses to remove anyone with spending recorded.
+    var householdSize: Int {
+        get { members.count }
+        set {
+            guard Ledger.people.indices.contains(newValue - 1), newValue != members.count else { return }
+            let previous = members
+            members = Ledger.people.prefix(newValue).map { ledger in
+                previous.first { $0.ledger == ledger } ?? .placeholder(ledger)
+            }
+            if !ledgers.contains(ledger) { ledger = .joint }
+            if let feedFilter, !ledgers.contains(feedFilter) { self.feedFilter = nil }
+            sync(failure: "Your household size couldn’t be changed. Anyone with spending recorded can’t be removed.", undo: { [weak self] in
+                self?.members = previous
+            }) { try await $0.setHouseholdSize(newValue) }
+        }
+    }
+
     var you: HouseholdMember { member(.you) }
     var partner: HouseholdMember { member(.partner) }
 
@@ -190,6 +218,31 @@ final class AppState {
         return result
     }
 
+    /// Spend categories the selected ledger has no budget for yet.
+    var unbudgetedCategories: [String] {
+        let budgeted = Set(summary?.envelopes.map(\.name) ?? [])
+        return SpendDraft.categories.filter { !budgeted.contains($0) }
+    }
+
+    @discardableResult
+    func createEnvelope(_ draft: EnvelopeDraft) -> Bool {
+        guard let budget = draft.amount, unbudgetedCategories.contains(draft.category) else { return false }
+        let ledger = ledger
+        let envelope = Envelope(name: draft.category, spent: 0, budget: budget,
+                                detail: "No spending yet", pace: "Within budget")
+        let previous = snapshot.ledgers
+        if let i = snapshot.ledgers.firstIndex(where: { $0.ledger == ledger }) {
+            snapshot.ledgers[i].envelopes.append(envelope)
+        } else {
+            snapshot.ledgers.append(LedgerSummary(ledger: ledger, available: 0, spent: 0, committed: 0,
+                                                  unbudgeted: 0, envelopes: [envelope]))
+        }
+        sync(failure: "Your \(envelope.name) budget couldn’t be saved.", undo: { [weak self] in
+            self?.snapshot.ledgers = previous
+        }) { try await $0.setEnvelopeBudget(ledger: ledger, name: envelope.name, budget: budget) }
+        return true
+    }
+
     var priorityEnvelopes: [Envelope] {
         envelopes.sorted {
             if $0.isOver != $1.isOver { return $0.isOver }
@@ -235,7 +288,8 @@ final class AppState {
         case (_, true):
             caption = "Nothing tracked here yet. Spending you add to this ledger will show here."
         case (_, false):
-            caption = "Personal allowance. \(privacySentence) the total, not the merchants."
+            caption = privacySentence.map { "Personal allowance. \($0) the total, not the merchants." }
+                ?? "Personal allowance."
         }
 
         return SafeToSpend(
@@ -245,9 +299,15 @@ final class AppState {
         )
     }
 
-    private var privacySentence: String {
-        let other = member(ledger == .you ? .partner : .you)
-        return other.name.isEmpty && other.ledger == .you ? "You see" : "\(other.firstName) sees"
+    /// Who else sees this personal ledger's total; nil when nobody does.
+    private var privacySentence: String? {
+        guard ledger == .you else { return you.name.isEmpty ? "You see" : "\(you.firstName) sees" }
+        let others = members.filter { $0.ledger != .you }
+        switch others.count {
+        case 0: return nil
+        case 1: return "\(others[0].firstName) sees"
+        default: return "Everyone else sees"
+        }
     }
 
     // MARK: - Transactions
@@ -297,12 +357,33 @@ final class AppState {
         }) { try await $0.setGoalMonthly(id: id, monthly: monthly) }
     }
 
+    @discardableResult
+    func createGoal(_ draft: GoalDraft) -> Bool {
+        guard let goal = draft.goal() else { return false }
+        snapshot.goals.append(goal)
+        sync(failure: "Your \(goal.name) goal couldn’t be saved.", undo: { [weak self] in
+            self?.snapshot.goals.removeAll { $0.id == goal.id }
+        }) { try await $0.createGoal(goal) }
+        return true
+    }
+
     // MARK: - Bills
 
     /// Soonest first, excluding anything already paid.
     var upcomingBills: [Bill] {
         let today = month.startOfToday()
         return snapshot.bills.filter { $0.dueDate >= today }.sorted { $0.dueDate < $1.dueDate }
+    }
+
+    @discardableResult
+    func createBill(_ draft: BillDraft) -> Bool {
+        guard let bill = draft.bill() else { return false }
+        snapshot.bills.append(bill)
+        snapshot.bills.sort { $0.dueDate < $1.dueDate }
+        sync(failure: "Your \(bill.name) bill couldn’t be saved.", undo: { [weak self] in
+            self?.snapshot.bills.removeAll { $0.id == bill.id }
+        }) { try await $0.createBill(bill) }
+        return true
     }
 
     // MARK: - Wealth
@@ -343,6 +424,7 @@ final class AppState {
     func openAddSpend(for source: Ledger? = nil) {
         draft = SpendDraft()
         draft.ledger = source ?? ledger
+        draft.splitsWithPartner = members.count == 2
         isAddingSpend = true
     }
 
@@ -395,6 +477,27 @@ final class AppState {
             authError = (error as? BackendError)?.message
                 ?? "Couldn’t reach Stór. Check your connection and try again."
         }
+    }
+
+    /// Clears everything the account loaded; the server revoke is best-effort.
+    func signOut() {
+        let backend = backend
+        Task { try? await backend.signOut() }
+        isAuthenticated = false
+        userEmail = ""
+        hasCompletedSetup = false
+        onboardingStep = 0
+        snapshot = .empty
+        addedTransactions = []
+        syncError = nil
+        authError = nil
+        selectedTab = .home
+        homePath = []
+        wealthPath = []
+        ledger = .joint
+        feedFilter = nil
+        selectedRecapID = nil
+        cancelAddSpend()
     }
 
     // MARK: - Setup flow

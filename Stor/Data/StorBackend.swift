@@ -22,12 +22,17 @@ enum BackendError: Error, Equatable {
 protocol StorBackend: Sendable {
     func signIn(email: String, password: String) async throws -> AuthSession
     func signUp(email: String, password: String) async throws -> AuthSession
+    func signOut() async throws
     func loadHousehold() async throws -> HouseholdSnapshot
     func addSpend(_ spend: Transaction) async throws
     func saveContributions(_ contributions: [Ledger: Double]) async throws
     func setGoalMonthly(id: String, monthly: Double) async throws
+    func createGoal(_ goal: Goal) async throws
+    func setEnvelopeBudget(ledger: Ledger, name: String, budget: Double) async throws
+    func createBill(_ bill: Bill) async throws
     func setLinkedAccounts(_ ids: Set<String>) async throws
     func setTopUpDay(_ day: Int) async throws
+    func setHouseholdSize(_ size: Int) async throws
     func completeSetup() async throws
 }
 
@@ -42,12 +47,17 @@ struct LocalBackend: StorBackend {
     func signUp(email: String, password: String) async throws -> AuthSession {
         AuthSession(email: email, hasCompletedSetup: false)
     }
+    func signOut() async throws {}
     func loadHousehold() async throws -> HouseholdSnapshot { snapshot }
     func addSpend(_ spend: Transaction) async throws {}
     func saveContributions(_ contributions: [Ledger: Double]) async throws {}
     func setGoalMonthly(id: String, monthly: Double) async throws {}
+    func createGoal(_ goal: Goal) async throws {}
+    func setEnvelopeBudget(ledger: Ledger, name: String, budget: Double) async throws {}
+    func createBill(_ bill: Bill) async throws {}
     func setLinkedAccounts(_ ids: Set<String>) async throws {}
     func setTopUpDay(_ day: Int) async throws {}
+    func setHouseholdSize(_ size: Int) async throws {}
     func completeSetup() async throws {}
 }
 

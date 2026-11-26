@@ -150,6 +150,47 @@ final class AppState {
         }
     }
 
+    /// A seat nobody has claimed, so an invite is worth offering.
+    var hasOpenSeat: Bool { members.contains { !$0.hasAccount } }
+
+    @discardableResult
+    func saveMembers(_ drafts: [MemberDraft]) -> Bool {
+        guard !drafts.isEmpty, drafts.allSatisfy(\.isValid) else { return false }
+        let previous = members
+        let profiles = drafts.map { MemberProfile(ledger: $0.ledger, name: $0.trimmedName, netPay: $0.netPay ?? 0) }
+        for profile in profiles {
+            guard let i = members.firstIndex(where: { $0.ledger == profile.ledger }) else { continue }
+            members[i].name = profile.name
+            members[i].initials = HouseholdMember.initials(of: profile.name)
+            members[i].netPay = profile.netPay
+        }
+        sync(failure: "Those names and pay couldn’t be saved.", undo: { [weak self] in
+            self?.members = previous
+        }) { try await $0.saveMembers(profiles) }
+        return true
+    }
+
+    func createInvite() async -> Result<Invite, BackendError> {
+        do {
+            return .success(try await backend.createInvite())
+        } catch {
+            return .failure(error as? BackendError ?? .server(0))
+        }
+    }
+
+    /// Moves this account into the household behind the code. Returns why it couldn't, or nil once joined.
+    func joinHousehold(code: String) async -> String? {
+        do {
+            let session = try await backend.joinHousehold(code: code)
+            hasCompletedSetup = session.hasCompletedSetup
+            onboardingStep = 0
+            await loadHousehold()
+            return nil
+        } catch {
+            return (error as? BackendError)?.message ?? "Couldn’t reach Stór. Check your connection and try again."
+        }
+    }
+
     var you: HouseholdMember { member(.you) }
     var partner: HouseholdMember { member(.partner) }
 

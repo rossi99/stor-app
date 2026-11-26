@@ -7,10 +7,18 @@ struct HouseholdView: View {
     @State private var editor: Editor?
     @State private var showsSignOut = false
 
-    private enum Editor: String, Identifiable {
-        case contributions, accounts
-        var id: String { rawValue }
-        var title: String { self == .contributions ? "Monthly contributions" : "Linked accounts" }
+    private enum Editor: Identifiable, Hashable {
+        case contributions, accounts, invite
+        case member(Ledger)
+
+        var id: String {
+            switch self {
+            case .contributions: "contributions"
+            case .accounts: "accounts"
+            case .invite: "invite"
+            case .member(let ledger): "member.\(ledger.rawValue)"
+            }
+        }
     }
 
     var body: some View {
@@ -23,12 +31,16 @@ struct HouseholdView: View {
                         ForEach(1...4, id: \.self) { count in Text("\(count)").tag(count) }
                     }
                     ForEach(appState.members) { member in
-                        VStack(alignment: .leading, spacing: Spacing.xs) {
-                            Text(member.displayName).font(.headline)
-                            Text("\(money(member.contribution)) per month")
-                                .foregroundStyle(Color.storSecondaryLabel)
+                        Button { editor = .member(member.ledger) } label: {
+                            settingLink(member.displayName,
+                                        value: "\(money(member.netPay)) take-home · \(money(member.contribution)) to the pot")
                         }
-                        .padding(.vertical, Spacing.xxs)
+                        .accessibilityHint("Edit name and take-home pay")
+                    }
+                    if appState.hasOpenSeat {
+                        Button { editor = .invite } label: {
+                            Label("Invite to household", systemImage: "person.badge.plus").frame(minHeight: 44)
+                        }
                     }
                 }
                 Section("Shared spending") {
@@ -75,15 +87,20 @@ struct HouseholdView: View {
             Button("Cancel", role: .cancel) { }
         }
         .sheet(item: $editor) { selected in
-            if selected == .contributions {
+            switch selected {
+            case .contributions:
                 ContributionSettingsSheet(members: appState.members)
-            } else {
+            case .invite:
+                InviteSheet()
+            case .member(let ledger):
+                MemberSheet(member: appState.member(ledger))
+            case .accounts:
                 NavigationStack {
                     ScrollView {
                         LinkAccountsStep(showsHeading: false).padding(Spacing.screen)
                     }
                     .background(Color.storBackground)
-                    .navigationTitle(selected.title)
+                    .navigationTitle("Linked accounts")
                     .navigationBarTitleDisplayMode(.inline)
                     .toolbar {
                         ToolbarItem(placement: .confirmationAction) { Button("Done") { editor = nil } }

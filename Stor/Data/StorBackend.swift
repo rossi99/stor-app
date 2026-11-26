@@ -6,13 +6,28 @@ struct AuthSession: Codable, Equatable, Sendable {
     var token: String?
 }
 
+struct MemberProfile: Codable, Equatable, Sendable {
+    let ledger: Ledger
+    let name: String
+    let netPay: Double
+}
+
+/// A one-use code that lets someone take an empty seat in the household.
+struct Invite: Codable, Equatable, Sendable {
+    let code: String
+    let expiresAt: Date
+}
+
 enum BackendError: Error, Equatable {
-    case invalidCredentials, emailTaken, server(Int)
+    case invalidCredentials, emailTaken, notFound, householdFull, householdUnavailable, server(Int)
 
     var message: String {
         switch self {
         case .invalidCredentials: "That email and password don’t match."
         case .emailTaken: "An account with that email already exists."
+        case .notFound: "That code isn’t valid or has expired. Ask for a new one."
+        case .householdFull: "Everyone in your household already has an account. Add a person in Household first."
+        case .householdUnavailable: "That household is full, or yours already has spending or bills in it."
         case .server: "Something went wrong on our side. Try again in a moment."
         }
     }
@@ -27,6 +42,9 @@ protocol StorBackend: Sendable {
     func loadHousehold() async throws -> HouseholdSnapshot
     func addSpend(_ spend: Transaction) async throws
     func saveContributions(_ contributions: [Ledger: Double]) async throws
+    func saveMembers(_ profiles: [MemberProfile]) async throws
+    func createInvite() async throws -> Invite
+    func joinHousehold(code: String) async throws -> AuthSession
     func setGoalMonthly(id: String, monthly: Double) async throws
     func createGoal(_ goal: Goal) async throws
     func setEnvelopeBudget(ledger: Ledger, name: String, budget: Double) async throws
@@ -53,6 +71,9 @@ struct LocalBackend: StorBackend {
     func loadHousehold() async throws -> HouseholdSnapshot { snapshot }
     func addSpend(_ spend: Transaction) async throws {}
     func saveContributions(_ contributions: [Ledger: Double]) async throws {}
+    func saveMembers(_ profiles: [MemberProfile]) async throws {}
+    func createInvite() async throws -> Invite { Invite(code: "DEMO-CODE", expiresAt: Date().addingTimeInterval(48 * 3600)) }
+    func joinHousehold(code: String) async throws -> AuthSession { throw BackendError.notFound }
     func setGoalMonthly(id: String, monthly: Double) async throws {}
     func createGoal(_ goal: Goal) async throws {}
     func setEnvelopeBudget(ledger: Ledger, name: String, budget: Double) async throws {}

@@ -3,11 +3,18 @@ import SwiftUI
 /// Introduce the supported arrangement without offering incomplete flows.
 struct MoneyModelStep: View {
     @Environment(AppState.self) private var appState
+    @Binding var people: [MemberDraft]
+    @State private var showsJoin = false
 
     var body: some View {
         @Bindable var state = appState
         VStack(alignment: .leading, spacing: Spacing.xl) {
             StepHeading(lead: "Your own money.", trail: "A shared plan.", step: 1)
+            Button("Have an invite code? Join a household") { showsJoin = true }
+                .storText(15, weight: .semibold)
+                .foregroundStyle(Color.storAccent)
+                .frame(minHeight: 44)
+                .accessibilityIdentifier("onboarding.join")
             Text("Stór gives everyone in your household a personal account, plus one joint pot. Keep personal allowances separate, and plan your shared spending together.")
                 .onboardingBody()
             VStack(alignment: .leading, spacing: Spacing.sm) {
@@ -17,6 +24,26 @@ struct MoneyModelStep: View {
                     .accessibilityElement(children: .contain)
                     .accessibilityLabel("People in your household")
                 Text("You can change this later in Household.")
+                    .storText(14).foregroundStyle(Color.storSecondaryLabel)
+            }
+            VStack(alignment: .leading, spacing: Spacing.sm) {
+                MonoLabel("Names and take-home pay", size: 10.5, tracking: 0.14, color: .storTertiaryLabel)
+                ForEach($people) { $person in
+                    VStack(alignment: .leading, spacing: Spacing.sm) {
+                        TextField(person.ledger == .you ? "Your name" : "\(person.ledger.defaultName)’s name", text: $person.name)
+                            .textInputAutocapitalization(.words)
+                            .accessibilityIdentifier("onboarding.\(person.ledger.rawValue).name")
+                        Divider()
+                        MoneyField("Take-home pay a month", text: $person.pay, id: "onboarding.\(person.ledger.rawValue).pay")
+                        if !person.isValid {
+                            Text("Enter pay up to 999,999.99 and a name under 60 characters.")
+                                .storText(14).foregroundStyle(Color.storNegative)
+                        }
+                    }
+                    .padding(Spacing.lg)
+                    .storCard()
+                }
+                Text("Your bills plan splits what is left after bills from this pay.")
                     .storText(14).foregroundStyle(Color.storSecondaryLabel)
             }
             VStack(alignment: .leading, spacing: Spacing.lg) {
@@ -34,5 +61,6 @@ struct MoneyModelStep: View {
                  : "Next, choose your accounts and monthly contributions. You can edit both in Household.")
                 .onboardingBody()
         }
+        .sheet(isPresented: $showsJoin) { JoinHouseholdSheet() }
     }
 }

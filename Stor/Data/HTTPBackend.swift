@@ -21,6 +21,7 @@ actor HTTPBackend: StorBackend {
     private struct TopUpDay: Encodable { let day: Int }
     private struct HouseholdSize: Encodable { let size: Int }
     private struct EnvelopeBudget: Encodable { let name: String; let budget: Double }
+    private struct InviteCode: Encodable { let code: String }
     private struct Empty: Encodable {}
 
     func signIn(email: String, password: String) async throws -> AuthSession {
@@ -55,6 +56,27 @@ actor HTTPBackend: StorBackend {
     func saveContributions(_ contributions: [Ledger: Double]) async throws {
         let body = contributions.map { Contribution(ledger: $0.key, amount: $0.value) }
         _ = try await send("PUT", "household/contributions", body)
+    }
+
+    func saveMembers(_ profiles: [MemberProfile]) async throws {
+        _ = try await send("PUT", "household/members", profiles)
+    }
+
+    func createInvite() async throws -> Invite {
+        do {
+            return try Self.decoder.decode(Invite.self, from: try await send("POST", "household/invites", Empty?.none))
+        } catch BackendError.emailTaken {
+            throw BackendError.householdFull
+        }
+    }
+
+    /// The session's token is unchanged; it now belongs to the joined household.
+    func joinHousehold(code: String) async throws -> AuthSession {
+        do {
+            return try Self.decoder.decode(AuthSession.self, from: try await send("POST", "household/join", InviteCode(code: code)))
+        } catch BackendError.emailTaken {
+            throw BackendError.householdUnavailable
+        }
     }
 
     func setGoalMonthly(id: String, monthly: Double) async throws {
@@ -119,6 +141,7 @@ actor HTTPBackend: StorBackend {
             // The server no longer accepts this token, so stop keeping it.
             if bearer == nil, token != nil { remember(nil) }
             throw BackendError.invalidCredentials
+        case 404: throw BackendError.notFound
         case 409: throw BackendError.emailTaken
         default: throw BackendError.server(status)
         }

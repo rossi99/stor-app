@@ -19,6 +19,27 @@ struct GoalDraft {
     }
 }
 
+/// A member's name and take-home pay being edited. Pay left blank counts as nothing yet.
+struct MemberDraft: Identifiable, Equatable {
+    let ledger: Ledger
+    var name: String
+    var pay: String
+
+    var id: Ledger { ledger }
+
+    init(_ member: HouseholdMember) {
+        ledger = member.ledger
+        name = member.name
+        pay = member.netPay > 0 ? MoneyInput.entry(for: member.netPay) : ""
+    }
+
+    var trimmedName: String { name.trimmingCharacters(in: .whitespacesAndNewlines) }
+    var netPay: Double? { pay.isEmpty ? 0 : MoneyInput.amount(from: pay) }
+    var isValid: Bool { netPay != nil && trimmedName.count <= 60 }
+
+    static func drafts(for members: [HouseholdMember]) -> [MemberDraft] { members.map(MemberDraft.init) }
+}
+
 /// A monthly budget for one spending category on one ledger.
 struct EnvelopeDraft {
     var category: String

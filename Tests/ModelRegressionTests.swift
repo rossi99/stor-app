@@ -197,6 +197,22 @@ struct ModelRegressionTests {
         expect(empty.snapshot.bills[0].meta == "Estimated" && empty.snapshot.bills[1].meta.isEmpty, "Only estimates are labelled")
         expect(empty.upcomingBills.count == 2, "A bill due today is still upcoming")
 
+        expect(HouseholdMember.initials(of: "Ana María Ruiz") == "AR" && HouseholdMember.initials(of: " sam ") == "S"
+               && HouseholdMember.initials(of: "") == "", "Initials match the server's first-and-last rule")
+        var person = MemberDraft(empty.you)
+        expect(person.pay.isEmpty && person.netPay == 0 && person.isValid, "Blank pay counts as nothing yet")
+        person.pay = "abc"
+        expect(!person.isValid, "Unreadable pay is refused")
+        person.pay = "3580"
+        person.name = String(repeating: "a", count: 61)
+        expect(!person.isValid, "Names stop at 60 characters")
+        person.name = "  Ana Whitfield "
+        expect(empty.hasOpenSeat && empty.saveMembers([person]) && empty.you.name == "Ana Whitfield"
+               && empty.you.initials == "AW" && empty.you.netPay == 3580, "Saving a member updates name, initials and pay")
+        expect(!empty.saveMembers([]) && !empty.saveMembers([{ var d = person; d.pay = "x"; return d }()]), "Invalid member edits never save")
+        let joinError = await empty.joinHousehold(code: "ABCD-EFGH")
+        expect(joinError == BackendError.notFound.message, "Offline, a join explains why it failed")
+
         await empty.signUp(email: "a@b.c", password: "password1")
         empty.createGoal(GoalDraft(name: "Car", target: "10", monthly: "1"))
         empty.selectedTab = .goals
@@ -243,6 +259,11 @@ struct ModelRegressionTests {
         offline.createEnvelope(EnvelopeDraft(category: category, budget: "50"))
         await settle { offline.syncError != nil }
         expect(offline.envelopes.count == envelopeCount && offline.unbudgetedCategories.contains(category), "A refused envelope is removed")
+        offline.syncError = nil
+        let named = offline.you.name
+        offline.saveMembers([{ var d = MemberDraft(offline.you); d.name = "Someone else"; return d }()])
+        await settle { offline.syncError != nil }
+        expect(offline.you.name == named, "A refused name change rolls back")
         offline.syncError = nil
         let billCount = offline.snapshot.bills.count
         offline.createBill(BillDraft(name: "Gym", amount: "30"))
@@ -323,6 +344,27 @@ struct ModelRegressionTests {
         expect(envelopeBody["name"] as? String == "Home & repairs" && envelopeBody["budget"] as? Double == 120, "Envelope names travel in the body")
         let billBody = try! JSONSerialization.jsonObject(with: bodies["POST /v1/bills"]!) as! [String: Any]
         expect(billBody["id"] as? String == "b1" && billBody["dueDate"] as? String == "2026-11-20T12:00:00Z", "Bills carry their id and a noon UTC date")
+        bodies = [:]
+        try! await http.saveMembers([MemberProfile(ledger: .partner, name: "Sam", netPay: 2182.5)])
+        let membersBody = try! JSONSerialization.jsonObject(with: bodies["PUT /v1/household/members"]!) as! [[String: Any]]
+        expect(membersBody.first?["ledger"] as? String == "partner" && membersBody.first?["netPay"] as? Double == 2182.5, "Members travel as [{ledger, name, netPay}]")
+        StubProtocol.body = Data(#"{"code":"ABCD-EFGH","expiresAt":"2026-11-28T12:00:00Z"}"#.utf8)
+        let code = try! await http.createInvite()
+        expect(code.code == "ABCD-EFGH" && StubProtocol.last?.url?.path == "/v1/household/invites", "An invite decodes its code and expiry")
+        StubProtocol.body = Data(#"{"email":"a@b.c","hasCompletedSetup":true}"#.utf8)
+        let joined = try! await http.joinHousehold(code: "abcd efgh")
+        let joinBody = try! JSONSerialization.jsonObject(with: bodies["POST /v1/household/join"]!) as! [String: Any]
+        expect(joined.hasCompletedSetup && joinBody["code"] as? String == "abcd efgh", "Joining sends the code as typed")
+        for (status, expected) in [(404, BackendError.notFound), (409, .householdUnavailable)] {
+            StubProtocol.status = status
+            do { _ = try await http.joinHousehold(code: "x"); expect(false, "A \(status) join must throw") }
+            catch { expect(error as? BackendError == expected, "A \(status) join maps to its own message") }
+        }
+        StubProtocol.status = 409
+        do { _ = try await http.createInvite(); expect(false, "A full household must throw") }
+        catch { expect(error as? BackendError == .householdFull, "A 409 invite means nobody's seat is free") }
+        StubProtocol.status = 200
+        StubProtocol.body = try! encoder.encode(HouseholdSnapshot.empty)
         try! await http.signOut()
         expect(StubProtocol.last?.url?.path == "/v1/auth/sign-out"
                && StubProtocol.last?.value(forHTTPHeaderField: "Authorization") == "Bearer abc", "Sign-out revokes the current token")
@@ -339,6 +381,9 @@ struct OfflineBackend: StorBackend {
     func loadHousehold() async throws -> HouseholdSnapshot { throw BackendError.server(500) }
     func addSpend(_ spend: Transaction) async throws { throw BackendError.server(500) }
     func saveContributions(_ contributions: [Ledger: Double]) async throws { throw BackendError.server(500) }
+    func saveMembers(_ profiles: [MemberProfile]) async throws { throw BackendError.server(500) }
+    func createInvite() async throws -> Invite { throw BackendError.server(500) }
+    func joinHousehold(code: String) async throws -> AuthSession { throw BackendError.server(500) }
     func setGoalMonthly(id: String, monthly: Double) async throws { throw BackendError.server(500) }
     func signOut() async throws { throw BackendError.server(500) }
     func restoreSession() async throws -> AuthSession? { throw BackendError.server(500) }

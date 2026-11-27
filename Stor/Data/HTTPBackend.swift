@@ -15,6 +15,7 @@ actor HTTPBackend: StorBackend {
     }
 
     private struct Credentials: Encodable { let email, password: String }
+    private struct ProviderToken: Encodable { let provider: SignInMethod; let idToken: String }
     private struct Contribution: Encodable { let ledger: Ledger; let amount: Double }
     private struct Monthly: Encodable { let monthly: Double }
     private struct AccountIDs: Encodable { let ids: [String] }
@@ -22,16 +23,19 @@ actor HTTPBackend: StorBackend {
     private struct HouseholdSize: Encodable { let size: Int }
     private struct EnvelopeBudget: Encodable { let name: String; let budget: Double }
     private struct InviteCode: Encodable { let code: String }
-    private struct Password: Encodable { let password: String }
     private struct TransferTick: Encodable { let month: String; let key: String; let done: Bool }
     private struct Empty: Encodable {}
 
     func signIn(email: String, password: String) async throws -> AuthSession {
-        try await authenticate("auth/sign-in", email: email, password: password)
+        try await authenticate("auth/sign-in", Credentials(email: email, password: password))
     }
 
     func signUp(email: String, password: String) async throws -> AuthSession {
-        try await authenticate("auth/sign-up", email: email, password: password)
+        try await authenticate("auth/sign-up", Credentials(email: email, password: password))
+    }
+
+    func signIn(provider: SignInMethod, idToken: String) async throws -> AuthSession {
+        try await authenticate("auth/provider", ProviderToken(provider: provider, idToken: idToken))
     }
 
     /// Forgets the token first, so a failed revoke still signs the device out.
@@ -42,8 +46,8 @@ actor HTTPBackend: StorBackend {
     }
 
     /// The server deletes the account and every session, so the token goes too.
-    func deleteAccount(password: String) async throws {
-        _ = try await send("DELETE", "auth/account", Password(password: password))
+    func deleteAccount(_ proof: DeletionProof) async throws {
+        _ = try await send("DELETE", "auth/account", proof, bearer: token)
         remember(nil)
     }
 
@@ -141,8 +145,8 @@ actor HTTPBackend: StorBackend {
         _ = try await send("POST", "household/setup-complete", Empty?.none)
     }
 
-    private func authenticate(_ path: String, email: String, password: String) async throws -> AuthSession {
-        let data = try await send("POST", path, Credentials(email: email, password: password))
+    private func authenticate(_ path: String, _ body: some Encodable) async throws -> AuthSession {
+        let data = try await send("POST", path, body)
         let session = try Self.decoder.decode(AuthSession.self, from: data)
         remember(session.token)
         return session

@@ -112,6 +112,7 @@ final class AppState {
     var isRestoring = false
     var authError: String?
     var userEmail = ""
+    var signInMethod: SignInMethod = .password
     var hasCompletedSetup = false
     var onboardingStep = 0
     var moneyModel: MoneyModel = .ledgers
@@ -593,6 +594,11 @@ final class AppState {
         await authenticate { try await $0.signUp(email: email, password: password) }
     }
 
+    /// Creates the account and its household on first use, like sign-up.
+    func signIn(provider: SignInMethod, idToken: String) async {
+        await authenticate { try await $0.signIn(provider: provider, idToken: idToken) }
+    }
+
     private func authenticate(_ call: (any StorBackend) async throws -> AuthSession) async {
         guard !isAuthenticating else { return }
         isAuthenticating = true
@@ -616,13 +622,13 @@ final class AppState {
     }
 
     /// Deletes the account; returns why it couldn't, or nil once it is gone and the app is back at the gate.
-    func deleteAccount(password: String) async -> String? {
+    func deleteAccount(_ proof: DeletionProof) async -> String? {
         do {
-            try await backend.deleteAccount(password: password)
+            try await backend.deleteAccount(proof)
             signOut()
             return nil
         } catch BackendError.invalidCredentials {
-            return "That password isn’t right."
+            return proof.password == nil ? "Couldn’t confirm it’s you. Try again." : "That password isn’t right."
         } catch {
             return (error as? BackendError)?.message ?? "Couldn’t reach Stór. Check your connection and try again."
         }
@@ -630,6 +636,7 @@ final class AppState {
 
     private func begin(_ session: AuthSession) async {
         userEmail = session.email
+        signInMethod = session.method
         hasCompletedSetup = session.hasCompletedSetup
         onboardingStep = 0
         loadState = .loading
@@ -643,6 +650,7 @@ final class AppState {
         Task { try? await backend.signOut() }
         isAuthenticated = false
         userEmail = ""
+        signInMethod = .password
         hasCompletedSetup = false
         onboardingStep = 0
         snapshot = .empty

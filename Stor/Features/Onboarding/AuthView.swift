@@ -45,6 +45,14 @@ struct AuthView: View {
                         .frame(maxWidth: 300, alignment: .leading)
                         .padding(.bottom, Spacing.xxl)
 
+                    ProviderButtons(methods: [.apple, .google]) { method, token, _ in
+                        await appState.signIn(provider: method, idToken: token)
+                    } onFailure: { appState.authError = $0 }
+
+                    MonoLabel("or with email", size: 10.5, tracking: 0.14, color: .storTertiaryLabel)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, Spacing.xl)
+
                     fields
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)

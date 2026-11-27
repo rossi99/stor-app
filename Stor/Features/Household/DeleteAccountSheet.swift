@@ -1,10 +1,11 @@
 import SwiftUI
 
-/// Deletes the signed-in account after the password is entered again.
+/// Deletes the signed-in account after the password is entered again, or a fresh Apple or Google sign-in.
 struct DeleteAccountSheet: View {
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
     @State private var password = ""
+    @State private var proof = DeletionProof()
     @State private var confirms = false
     @State private var error: String?
     @State private var isDeleting = false
@@ -20,9 +21,17 @@ struct DeleteAccountSheet: View {
                          : "Your account and your whole household are deleted: every bill, goal, contribution and spend. This can’t be undone.")
                 }
                 Section {
-                    SecureField("Password", text: $password)
-                        .textContentType(.password)
-                        .accessibilityIdentifier("delete.password")
+                    if appState.signInMethod == .password {
+                        SecureField("Password", text: $password)
+                            .textContentType(.password)
+                            .accessibilityIdentifier("delete.password")
+                    } else {
+                        Text("Confirm it’s you to delete your account.")
+                        ProviderButtons(methods: [appState.signInMethod]) { _, token, code in
+                            proof = DeletionProof(idToken: token, authorizationCode: code)
+                            confirms = true
+                        } onFailure: { error = $0 }
+                    }
                 } footer: {
                     if let error { Text(error).foregroundStyle(Color.storNegative) }
                 }
@@ -35,17 +44,22 @@ struct DeleteAccountSheet: View {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
             }
             .safeAreaInset(edge: .bottom) {
-                PrimaryButton(title: isDeleting ? "Deleting…" : "Delete account", isEnabled: !password.isEmpty && !isDeleting,
-                              fill: .storNegative) { confirms = true }
+                if appState.signInMethod == .password {
+                    PrimaryButton(title: isDeleting ? "Deleting…" : "Delete account", isEnabled: !password.isEmpty && !isDeleting,
+                                  fill: .storNegative) {
+                        proof = DeletionProof(password: password)
+                        confirms = true
+                    }
                     .accessibilityIdentifier("delete.submit")
                     .padding(Spacing.screen)
                     .background(Color.storBackground)
+                }
             }
             .confirmationDialog("Delete your account for good?", isPresented: $confirms, titleVisibility: .visible) {
                 Button("Delete account", role: .destructive) {
                     Task {
                         isDeleting = true
-                        error = await appState.deleteAccount(password: password)
+                        error = await appState.deleteAccount(proof)
                         isDeleting = false
                     }
                 }

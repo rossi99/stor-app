@@ -322,14 +322,20 @@ struct ModelRegressionTests {
         await settle { !expired.isAuthenticated }
         expect(!expired.isAuthenticated && expired.authError == "Your session has ended. Sign in again."
                && expired.snapshot == .empty, "A rejected session returns to the gate instead of failing every save")
-        let deleteFailure = await offline.deleteAccount(password: "x")
+        let deleteFailure = await offline.deleteAccount(DeletionProof(password: "x"))
         expect(deleteFailure == BackendError.server(500).message, "A failed deletion explains why")
-        let wrong = await AppState(backend: OfflineBackend(failure: .invalidCredentials)).deleteAccount(password: "x")
+        let wrong = await AppState(backend: OfflineBackend(failure: .invalidCredentials)).deleteAccount(DeletionProof(password: "x"))
         expect(wrong == "That password isn’t right.", "A wrong password is named as such")
+        let stale = await AppState(backend: OfflineBackend(failure: .invalidCredentials)).deleteAccount(DeletionProof(idToken: "t"))
+        expect(stale == "Couldn’t confirm it’s you. Try again.", "A rejected Apple or Google confirmation doesn't blame a password")
         let local = AppState()
         local.isAuthenticated = true
-        let deleted = await local.deleteAccount(password: "password1")
+        let deleted = await local.deleteAccount(DeletionProof(password: "password1"))
         expect(deleted == nil && !local.isAuthenticated, "Deleting the account signs out")
+        await local.signIn(provider: .apple, idToken: "t")
+        expect(local.isAuthenticated && local.signInMethod == .apple, "Apple sign-in remembers how to confirm deletion")
+        local.signOut()
+        expect(local.signInMethod == .password, "Signing out forgets the sign-in method")
         await local.restoreSession()
         expect(!local.isAuthenticated && !local.isRestoring, "Nothing saved means signing in")
         await local.signUp(email: "a@b.c", password: "password1")
@@ -341,12 +347,12 @@ struct ModelRegressionTests {
         let http = HTTPBackend(baseURL: URL(string: "https://stor.test/v1")!, session: URLSession(configuration: configuration), tokens: tokens)
         let nothing = try! await http.restoreSession()
         expect(nothing == nil, "With no saved token there is nothing to restore")
-        StubProtocol.body = Data(#"{"email":"a@b.c","hasCompletedSetup":true,"token":"abc"}"#.utf8)
+        StubProtocol.body = Data(#"{"email":"a@b.c","hasCompletedSetup":true,"token":"abc","method":"password"}"#.utf8)
         let session = try! await http.signIn(email: "a@b.c", password: "secret")
         expect(session.hasCompletedSetup && StubProtocol.last?.url?.path == "/v1/auth/sign-in", "Sign-in posts to the contract path")
         expect(tokens.token == "abc", "Sign-in keeps the token for the next launch")
         let relaunched = HTTPBackend(baseURL: URL(string: "https://stor.test/v1")!, session: URLSession(configuration: configuration), tokens: tokens)
-        StubProtocol.body = Data(#"{"email":"a@b.c","hasCompletedSetup":true}"#.utf8)
+        StubProtocol.body = Data(#"{"email":"a@b.c","hasCompletedSetup":true,"method":"password"}"#.utf8)
         let restored = try! await relaunched.restoreSession()
         expect(restored?.email == "a@b.c" && StubProtocol.last?.url?.path == "/v1/auth/session"
                && StubProtocol.last?.value(forHTTPHeaderField: "Authorization") == "Bearer abc", "A relaunch checks the saved token")
@@ -372,7 +378,7 @@ struct ModelRegressionTests {
         }
         StubProtocol.status = 200
         expect(tokens.token == nil, "A rejected token is forgotten")
-        StubProtocol.body = Data(#"{"email":"a@b.c","hasCompletedSetup":true,"token":"abc"}"#.utf8)
+        StubProtocol.body = Data(#"{"email":"a@b.c","hasCompletedSetup":true,"token":"abc","method":"password"}"#.utf8)
         _ = try! await http.signIn(email: "a@b.c", password: "secret")
         StubProtocol.body = try! encoder.encode(HouseholdSnapshot.empty)
         var bodies: [String: Data] = [:]
@@ -423,7 +429,7 @@ struct ModelRegressionTests {
         StubProtocol.body = Data(#"{"code":"ABCD-EFGH","expiresAt":"2026-11-28T12:00:00Z"}"#.utf8)
         let code = try! await http.createInvite()
         expect(code.code == "ABCD-EFGH" && StubProtocol.last?.url?.path == "/v1/household/invites", "An invite decodes its code and expiry")
-        StubProtocol.body = Data(#"{"email":"a@b.c","hasCompletedSetup":true}"#.utf8)
+        StubProtocol.body = Data(#"{"email":"a@b.c","hasCompletedSetup":true,"method":"password"}"#.utf8)
         let joined = try! await http.joinHousehold(code: "abcd efgh")
         let joinBody = try! JSONSerialization.jsonObject(with: bodies["POST /v1/household/join"]!) as! [String: Any]
         expect(joined.hasCompletedSetup && joinBody["code"] as? String == "abcd efgh", "Joining sends the code as typed")
@@ -444,12 +450,52 @@ struct ModelRegressionTests {
         expect(StubProtocol.last?.url?.path == "/v1/auth/sign-out"
                && StubProtocol.last?.value(forHTTPHeaderField: "Authorization") == "Bearer abc", "Sign-out revokes the current token")
         expect(tokens.token == nil, "Sign-out forgets the saved token")
-        StubProtocol.body = Data(#"{"email":"a@b.c","hasCompletedSetup":true,"token":"abc"}"#.utf8)
+        StubProtocol.body = Data(#"{"email":"a@b.c","hasCompletedSetup":true,"token":"abc","method":"password"}"#.utf8)
         _ = try! await http.signIn(email: "a@b.c", password: "secret")
+        StubProtocol.status = 401
+        do {
+            try await http.deleteAccount(DeletionProof(password: "x"))
+            expect(false, "A rejected deletion must throw")
+        } catch {
+            expect(error as? BackendError == .invalidCredentials && tokens.token == "abc",
+                   "A rejected deletion proof keeps the session so the user can try again")
+        }
+        StubProtocol.status = 200
         bodies = [:]
-        try! await http.deleteAccount(password: "secret")
+        try! await http.deleteAccount(DeletionProof(password: "secret"))
         let deleteBody = try! JSONSerialization.jsonObject(with: bodies["DELETE /v1/auth/account"]!) as! [String: Any]
-        expect(deleteBody["password"] as? String == "secret" && tokens.token == nil, "Deleting sends the password and forgets the token")
+        expect(deleteBody as? [String: String] == ["password": "secret"] && tokens.token == nil, "Deleting sends only the password and forgets the token")
+        StubProtocol.body = Data(#"{"email":"x1@privaterelay.appleid.com","hasCompletedSetup":false,"token":"apl","method":"apple"}"#.utf8)
+        let apple = try! await http.signIn(provider: .apple, idToken: "id-1")
+        let providerBody = try! JSONSerialization.jsonObject(with: bodies["POST /v1/auth/provider"]!) as! [String: Any]
+        expect(apple.method == .apple && tokens.token == "apl" && providerBody["provider"] as? String == "apple"
+               && providerBody["idToken"] as? String == "id-1", "Provider sign-in posts the ID token and keeps the session")
+        try! await http.deleteAccount(DeletionProof(idToken: "id-2", authorizationCode: "code-1"))
+        let providerDelete = try! JSONSerialization.jsonObject(with: bodies["DELETE /v1/auth/account"]!) as! [String: Any]
+        expect(providerDelete as? [String: String] == ["idToken": "id-2", "authorizationCode": "code-1"] && tokens.token == nil,
+               "Deletion sends the provider proof without a password")
+
+        expect(GoogleSignIn.challenge(for: "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk") == "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+               "PKCE matches RFC 7636's example")
+        let google = GoogleSignIn(clientID: "123-abc.apps.googleusercontent.com")
+        let authorize = URLComponents(url: google.authorizeURL, resolvingAgainstBaseURL: false)!.queryItems!
+        let query = Dictionary(uniqueKeysWithValues: authorize.map { ($0.name, $0.value ?? "") })
+        expect(google.redirectScheme == "com.googleusercontent.apps.123-abc"
+               && query["redirect_uri"] == "com.googleusercontent.apps.123-abc:/oauthredirect"
+               && query["code_challenge"] == GoogleSignIn.challenge(for: google.verifier) && query["code_challenge_method"] == "S256"
+               && query["state"] == google.state && google.verifier.count == 43 && query["scope"] == "openid email", "Google is asked for a PKCE code back to the reversed client ID")
+        let stub = URLSession(configuration: configuration)
+        do {
+            _ = try await google.idToken(from: URL(string: "com.googleusercontent.apps.123-abc:/oauthredirect?code=c1&state=forged")!, session: stub)
+            expect(false, "A forged state must throw")
+        } catch {
+            expect(error as? BackendError == .invalidCredentials, "A redirect with another state is refused")
+        }
+        StubProtocol.body = Data(#"{"id_token":"google-id"}"#.utf8)
+        let googleToken = try! await google.idToken(from: URL(string: "com.googleusercontent.apps.123-abc:/oauthredirect?code=c1&state=\(google.state)")!, session: stub)
+        let exchange = String(data: bodies["POST /token"]!, encoding: .utf8)!
+        expect(googleToken == "google-id" && exchange.contains("code_verifier=\(google.verifier)")
+               && exchange.contains("code=c1"), "The code is swapped for an ID token with the PKCE verifier")
         StubProtocol.body = try! encoder.encode(HouseholdSnapshot.empty)
         _ = try! await http.loadHousehold()
         expect(StubProtocol.last?.value(forHTTPHeaderField: "Authorization") == nil, "Signed-out requests carry no token")
@@ -461,6 +507,7 @@ struct OfflineBackend: StorBackend {
     var failure = BackendError.server(500)
     func signIn(email: String, password: String) async throws -> AuthSession { throw failure }
     func signUp(email: String, password: String) async throws -> AuthSession { throw failure }
+    func signIn(provider: SignInMethod, idToken: String) async throws -> AuthSession { throw failure }
     func loadHousehold() async throws -> HouseholdSnapshot { throw failure }
     func addSpend(_ spend: Transaction) async throws { throw failure }
     func saveContributions(_ contributions: [Ledger: Double]) async throws { throw failure }
@@ -470,7 +517,7 @@ struct OfflineBackend: StorBackend {
     func setGoalMonthly(id: String, monthly: Double) async throws { throw failure }
     func signOut() async throws { throw failure }
     func restoreSession() async throws -> AuthSession? { throw failure }
-    func deleteAccount(password: String) async throws { throw failure }
+    func deleteAccount(_ proof: DeletionProof) async throws { throw failure }
     func createGoal(_ goal: Goal) async throws { throw failure }
     func setEnvelopeBudget(ledger: Ledger, name: String, budget: Double) async throws { throw failure }
     func saveBill(_ bill: Bill) async throws { throw failure }

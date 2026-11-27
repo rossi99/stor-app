@@ -1,9 +1,21 @@
 import Foundation
 
+/// How an account signs in, which is also how it confirms deleting itself.
+enum SignInMethod: String, Codable, Sendable { case password, apple, google }
+
 struct AuthSession: Codable, Equatable, Sendable {
     let email: String
     let hasCompletedSetup: Bool
     var token: String?
+    let method: SignInMethod
+}
+
+/// Re-confirms it's the account holder: the password, or a fresh Apple or Google ID token.
+/// Apple's authorization code lets the server revoke Stór's Apple grant.
+struct DeletionProof: Encodable, Sendable {
+    var password: String?
+    var idToken: String?
+    var authorizationCode: String?
 }
 
 struct MemberProfile: Codable, Equatable, Sendable {
@@ -24,7 +36,7 @@ enum BackendError: Error, Equatable {
     var message: String {
         switch self {
         case .invalidCredentials: "That email and password don’t match."
-        case .emailTaken: "An account with that email already exists."
+        case .emailTaken: "An account with that email already exists. Sign in the way you first did."
         case .notFound: "That code isn’t valid or has expired. Ask for a new one."
         case .householdFull: "Everyone in your household already has an account. Add a person in Household first."
         case .householdUnavailable: "That household is full, or yours already has spending or bills in it."
@@ -38,9 +50,10 @@ enum BackendError: Error, Equatable {
 protocol StorBackend: Sendable {
     func signIn(email: String, password: String) async throws -> AuthSession
     func signUp(email: String, password: String) async throws -> AuthSession
+    func signIn(provider: SignInMethod, idToken: String) async throws -> AuthSession
     func signOut() async throws
     func restoreSession() async throws -> AuthSession?
-    func deleteAccount(password: String) async throws
+    func deleteAccount(_ proof: DeletionProof) async throws
     func loadHousehold() async throws -> HouseholdSnapshot
     func addSpend(_ spend: Transaction) async throws
     func saveContributions(_ contributions: [Ledger: Double]) async throws
@@ -68,14 +81,17 @@ struct LocalBackend: StorBackend {
     var plan: BudgetPlan?
 
     func signIn(email: String, password: String) async throws -> AuthSession {
-        AuthSession(email: email, hasCompletedSetup: true)
+        AuthSession(email: email, hasCompletedSetup: true, method: .password)
     }
     func signUp(email: String, password: String) async throws -> AuthSession {
-        AuthSession(email: email, hasCompletedSetup: false)
+        AuthSession(email: email, hasCompletedSetup: false, method: .password)
+    }
+    func signIn(provider: SignInMethod, idToken: String) async throws -> AuthSession {
+        AuthSession(email: "you@example.com", hasCompletedSetup: false, method: provider)
     }
     func signOut() async throws {}
     func restoreSession() async throws -> AuthSession? { nil }
-    func deleteAccount(password: String) async throws {}
+    func deleteAccount(_ proof: DeletionProof) async throws {}
     func loadHousehold() async throws -> HouseholdSnapshot { snapshot }
     func addSpend(_ spend: Transaction) async throws {}
     func saveContributions(_ contributions: [Ledger: Double]) async throws {}
@@ -97,6 +113,9 @@ struct LocalBackend: StorBackend {
 }
 
 enum BackendConfig {
+    /// The Google Cloud iOS OAuth client ID; empty hides Google sign-in.
+    static let googleClientID = ""
+
     /// Debug builds take `-useFixtures` or a `STOR_API_URL` environment variable.
     /// shortcut: Release has no server URL, set one here when the API is deployed.
     static func live() -> any StorBackend {

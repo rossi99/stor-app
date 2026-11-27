@@ -7,7 +7,7 @@ struct PrivacyView: View {
 
     private let sections: [(String, String)] = [
         ("What Stór stores",
-         "Your email address and a protected form of your password. Names and take-home pay you enter for your household. Bills, budget settings, goals, contributions and spending you add. Nothing is read from your bank."),
+         "Your email address and a protected form of your password, or, if you sign in with Apple or Google, the account ID and email address they share with Stór. Names and take-home pay you enter for your household. Bills, budget settings, goals, contributions and spending you add. Nothing is read from your bank."),
         ("Why",
          "Only to run your household's budget: working out each month's bills, transfers, 50/30/20 check and forecast. Stór shows no adverts and sells nothing to anyone."),
         ("Who sees it",

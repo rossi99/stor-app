@@ -30,16 +30,19 @@ final class AppState {
     private let backend: any StorBackend
     private let clock: () -> Date
 
-    init(backend: any StorBackend = LocalBackend(), snapshot: HouseholdSnapshot = .empty,
+    init(backend: any StorBackend = LocalBackend(), snapshot: HouseholdSnapshot = .empty, plan: BudgetPlan? = nil,
          clock: @escaping () -> Date = Date.init) {
         self.backend = backend
         self.snapshot = snapshot
         self.clock = clock
+        self.plan = plan ?? .empty(month: BudgetPlan.key(for: clock()))
     }
 
     // MARK: - Data
 
     var snapshot: HouseholdSnapshot
+    /// This month's budget plan, bills included.
+    var plan: BudgetPlan
     var loadState: LoadState = .loaded
     /// A write the server refused, already rolled back, waiting to be shown.
     var syncError: String?
@@ -48,22 +51,45 @@ final class AppState {
 
     func loadHousehold() async {
         loadState = .loading
+        let month = BudgetPlan.key(for: clock())
+        async let household = backend.loadHousehold()
+        async let currentPlan = backend.loadPlan(month: month)
         do {
-            snapshot = try await backend.loadHousehold()
+            snapshot = try await household
+            // A plan that fails to load reads as an empty month rather than failing the household.
+            plan = (try? await currentPlan) ?? .empty(month: month)
             addedTransactions = []
             loadState = .loaded
         } catch {
+            _ = try? await currentPlan
             loadState = .failed
+            if error as? BackendError == .invalidCredentials { expireSession() }
         }
     }
 
+    var planMonth: String { BudgetPlan.key(for: clock()) }
+
+    /// Picks up the server's recalculation after a write that changes the plan.
+    func refreshPlan() async {
+        if let fresh = try? await backend.loadPlan(month: planMonth) { plan = fresh }
+    }
+
+    /// Any month's plan, for browsing without replacing this month's.
+    func loadPlan(month: String) async -> BudgetPlan? {
+        try? await backend.loadPlan(month: month)
+    }
+
     /// Runs a write after the local change; a failure undoes it and tells the user.
-    private func sync(failure: String, undo: @escaping () -> Void,
+    private func sync(failure: String, refreshesPlan: Bool = false, undo: @escaping () -> Void,
                       _ call: @escaping (any StorBackend) async throws -> Void) {
         let backend = backend
         Task {
             do {
                 try await call(backend)
+                if refreshesPlan { await refreshPlan() }
+            } catch BackendError.invalidCredentials {
+                undo()
+                expireSession()
             } catch {
                 undo()
                 syncError = failure
@@ -71,12 +97,22 @@ final class AppState {
         }
     }
 
+    /// The server stopped accepting the session, so go back to the gate rather than failing every save.
+    private func expireSession() {
+        guard isAuthenticated else { return }
+        signOut()
+        authError = "Your session has ended. Sign in again."
+    }
+
     // MARK: - Session
 
     var isAuthenticated = false
     var isAuthenticating = false
+    /// Checking a stored session at launch, before showing the sign-in gate.
+    var isRestoring = false
     var authError: String?
     var userEmail = ""
+    var signInMethod: SignInMethod = .password
     var hasCompletedSetup = false
     var onboardingStep = 0
     var moneyModel: MoneyModel = .ledgers
@@ -118,6 +154,75 @@ final class AppState {
     var members: [HouseholdMember] {
         get { snapshot.members }
         set { snapshot.members = newValue }
+    }
+
+    /// Ledgers in display order: you, the joint pot, then everyone else.
+    var ledgers: [Ledger] {
+        [.you, .joint] + members.map(\.ledger).filter { $0 != .you }
+    }
+
+    /// "Two personal accounts + one joint pot".
+    var householdSummary: String {
+        let count = ["One", "Two", "Three", "Four"][max(0, min(3, members.count - 1))]
+        return "\(count) personal account\(members.count == 1 ? "" : "s") + one joint pot"
+    }
+
+    /// People in the household, 1 to 4. The server refuses to remove anyone with spending recorded.
+    var householdSize: Int {
+        get { members.count }
+        set {
+            guard Ledger.people.indices.contains(newValue - 1), newValue != members.count else { return }
+            let previous = members
+            members = Ledger.people.prefix(newValue).map { ledger in
+                previous.first { $0.ledger == ledger } ?? .placeholder(ledger)
+            }
+            if !ledgers.contains(ledger) { ledger = .joint }
+            if let feedFilter, !ledgers.contains(feedFilter) { self.feedFilter = nil }
+            sync(failure: "Your household size couldn’t be changed. Anyone with spending recorded can’t be removed.", refreshesPlan: true, undo: { [weak self] in
+                self?.members = previous
+            }) { try await $0.setHouseholdSize(newValue) }
+        }
+    }
+
+    /// A seat nobody has claimed, so an invite is worth offering.
+    var hasOpenSeat: Bool { members.contains { !$0.hasAccount } }
+
+    @discardableResult
+    func saveMembers(_ drafts: [MemberDraft]) -> Bool {
+        guard !drafts.isEmpty, drafts.allSatisfy(\.isValid) else { return false }
+        let previous = members
+        let profiles = drafts.map { MemberProfile(ledger: $0.ledger, name: $0.trimmedName, netPay: $0.netPay ?? 0) }
+        for profile in profiles {
+            guard let i = members.firstIndex(where: { $0.ledger == profile.ledger }) else { continue }
+            members[i].name = profile.name
+            members[i].initials = HouseholdMember.initials(of: profile.name)
+            members[i].netPay = profile.netPay
+        }
+        sync(failure: "Those names and pay couldn’t be saved.", refreshesPlan: true, undo: { [weak self] in
+            self?.members = previous
+        }) { try await $0.saveMembers(profiles) }
+        return true
+    }
+
+    func createInvite() async -> Result<Invite, BackendError> {
+        do {
+            return .success(try await backend.createInvite())
+        } catch {
+            return .failure(error as? BackendError ?? .server(0))
+        }
+    }
+
+    /// Moves this account into the household behind the code. Returns why it couldn't, or nil once joined.
+    func joinHousehold(code: String) async -> String? {
+        do {
+            let session = try await backend.joinHousehold(code: code)
+            hasCompletedSetup = session.hasCompletedSetup
+            onboardingStep = 0
+            await loadHousehold()
+            return nil
+        } catch {
+            return (error as? BackendError)?.message ?? "Couldn’t reach Stór. Check your connection and try again."
+        }
     }
 
     var you: HouseholdMember { member(.you) }
@@ -190,6 +295,31 @@ final class AppState {
         return result
     }
 
+    /// Spend categories the selected ledger has no budget for yet.
+    var unbudgetedCategories: [String] {
+        let budgeted = Set(summary?.envelopes.map(\.name) ?? [])
+        return SpendDraft.categories.filter { !budgeted.contains($0) }
+    }
+
+    @discardableResult
+    func createEnvelope(_ draft: EnvelopeDraft) -> Bool {
+        guard let budget = draft.amount, unbudgetedCategories.contains(draft.category) else { return false }
+        let ledger = ledger
+        let envelope = Envelope(name: draft.category, spent: 0, budget: budget,
+                                detail: "No spending yet", pace: "Within budget")
+        let previous = snapshot.ledgers
+        if let i = snapshot.ledgers.firstIndex(where: { $0.ledger == ledger }) {
+            snapshot.ledgers[i].envelopes.append(envelope)
+        } else {
+            snapshot.ledgers.append(LedgerSummary(ledger: ledger, available: 0, spent: 0, committed: 0,
+                                                  unbudgeted: 0, envelopes: [envelope]))
+        }
+        sync(failure: "Your \(envelope.name) budget couldn’t be saved.", undo: { [weak self] in
+            self?.snapshot.ledgers = previous
+        }) { try await $0.setEnvelopeBudget(ledger: ledger, name: envelope.name, budget: budget) }
+        return true
+    }
+
     var priorityEnvelopes: [Envelope] {
         envelopes.sorted {
             if $0.isOver != $1.isOver { return $0.isOver }
@@ -235,7 +365,8 @@ final class AppState {
         case (_, true):
             caption = "Nothing tracked here yet. Spending you add to this ledger will show here."
         case (_, false):
-            caption = "Personal allowance. \(privacySentence) the total, not the merchants."
+            caption = privacySentence.map { "Personal allowance. \($0) the total, not the merchants." }
+                ?? "Personal allowance."
         }
 
         return SafeToSpend(
@@ -245,9 +376,15 @@ final class AppState {
         )
     }
 
-    private var privacySentence: String {
-        let other = member(ledger == .you ? .partner : .you)
-        return other.name.isEmpty && other.ledger == .you ? "You see" : "\(other.firstName) sees"
+    /// Who else sees this personal ledger's total; nil when nobody does.
+    private var privacySentence: String? {
+        guard ledger == .you else { return you.name.isEmpty ? "You see" : "\(you.firstName) sees" }
+        let others = members.filter { $0.ledger != .you }
+        switch others.count {
+        case 0: return nil
+        case 1: return "\(others[0].firstName) sees"
+        default: return "Everyone else sees"
+        }
     }
 
     // MARK: - Transactions
@@ -297,12 +434,90 @@ final class AppState {
         }) { try await $0.setGoalMonthly(id: id, monthly: monthly) }
     }
 
+    @discardableResult
+    func createGoal(_ draft: GoalDraft) -> Bool {
+        guard let goal = draft.goal() else { return false }
+        snapshot.goals.append(goal)
+        sync(failure: "Your \(goal.name) goal couldn’t be saved.", undo: { [weak self] in
+            self?.snapshot.goals.removeAll { $0.id == goal.id }
+        }) { try await $0.createGoal(goal) }
+        return true
+    }
+
     // MARK: - Bills
 
-    /// Soonest first, excluding anything already paid.
+    /// Joint bills with a due day still to come this month, soonest first. Nothing lands this month means not upcoming.
     var upcomingBills: [Bill] {
         let today = month.startOfToday()
-        return snapshot.bills.filter { $0.dueDate >= today }.sorted { $0.dueDate < $1.dueDate }
+        return plan.bills
+            .filter { !$0.isPersonal && $0.thisMonth > 0 && ($0.dueDate(in: month) ?? .distantPast) >= today }
+            .sorted { $0.dueDate(in: month)! < $1.dueDate(in: month)! }
+    }
+
+    /// Joint bills by group, largest group first, then your cash-account bills under "Your cash account".
+    var billGroups: [(name: String, total: Double, bills: [Bill])] {
+        let joint = Dictionary(grouping: plan.bills.filter { !$0.isPersonal }, by: \.group)
+            .map { (name: $0.key, total: $0.value.reduce(0) { $0 + $1.thisMonth },
+                    bills: $0.value.sorted { ($0.thisMonth, $1.name) > ($1.thisMonth, $0.name) }) }
+            .sorted { ($0.total, $1.name) > ($1.total, $0.name) }
+        let own = plan.bills.filter(\.isPersonal)
+        return own.isEmpty ? joint : joint + [(name: "Your cash account", total: own.reduce(0) { $0 + $1.thisMonth }, bills: own)]
+    }
+
+    /// Groups already in use, for picking a pot.
+    var billGroupNames: [String] {
+        Array(Set(plan.bills.filter { !$0.isPersonal }.map(\.group))).sorted()
+    }
+
+    /// Adds the bill, or replaces the one with the same id.
+    @discardableResult
+    func saveBill(_ draft: BillDraft) -> Bool {
+        guard let bill = draft.bill() else { return false }
+        let previous = plan.bills
+        if let i = plan.bills.firstIndex(where: { $0.id == bill.id }) {
+            plan.bills[i] = bill
+        } else {
+            plan.bills.append(bill)
+        }
+        sync(failure: "Your \(bill.name) bill couldn’t be saved.", refreshesPlan: true, undo: { [weak self] in
+            self?.plan.bills = previous
+        }) { try await $0.saveBill(bill) }
+        return true
+    }
+
+    func deleteBill(_ bill: Bill) {
+        let previous = plan.bills
+        plan.bills.removeAll { $0.id == bill.id }
+        sync(failure: "Your \(bill.name) bill couldn’t be deleted.", refreshesPlan: true, undo: { [weak self] in
+            self?.plan.bills = previous
+        }) { try await $0.deleteBill(id: bill.id) }
+    }
+
+    // MARK: - Plan
+
+    @discardableResult
+    func saveBudget(_ settings: BudgetSettings) -> Bool {
+        guard min(settings.essentialPct, settings.discretionaryPct, settings.savingPct) >= 0,
+              settings.essentialPct + settings.discretionaryPct + settings.savingPct == 100,
+              settings.loanAllocation >= 0, (settings.cashCap ?? 0) >= 0 else { return false }
+        let previous = plan.settings
+        plan.settings = settings
+        sync(failure: "Your budget settings couldn’t be saved.", refreshesPlan: true, undo: { [weak self] in
+            self?.plan.settings = previous
+        }) { try await $0.saveBudget(settings) }
+        return true
+    }
+
+    /// Ticks or unticks a payday transfer. Another month's plan, being browsed, updates its own copy.
+    func setTransfer(_ key: String, done: Bool, month: String) {
+        func mark(_ value: Bool) {
+            guard plan.month == month, let i = plan.transfers.firstIndex(where: { $0.key == key }) else { return }
+            plan.transfers[i].done = value
+        }
+        mark(done)
+        sync(failure: "That transfer couldn’t be ticked off.", undo: { mark(!done) }) {
+            try await $0.setTransfer(month: month, key: key, done: done)
+        }
     }
 
     // MARK: - Wealth
@@ -343,6 +558,7 @@ final class AppState {
     func openAddSpend(for source: Ledger? = nil) {
         draft = SpendDraft()
         draft.ledger = source ?? ledger
+        draft.splitsWithPartner = members.count == 2
         isAddingSpend = true
     }
 
@@ -378,23 +594,77 @@ final class AppState {
         await authenticate { try await $0.signUp(email: email, password: password) }
     }
 
+    /// Creates the account and its household on first use, like sign-up.
+    func signIn(provider: SignInMethod, idToken: String) async {
+        await authenticate { try await $0.signIn(provider: provider, idToken: idToken) }
+    }
+
     private func authenticate(_ call: (any StorBackend) async throws -> AuthSession) async {
         guard !isAuthenticating else { return }
         isAuthenticating = true
         authError = nil
         defer { isAuthenticating = false }
         do {
-            let session = try await call(backend)
-            userEmail = session.email
-            hasCompletedSetup = session.hasCompletedSetup
-            onboardingStep = 0
-            loadState = .loading
-            isAuthenticated = true
-            await loadHousehold()
+            await begin(try await call(backend))
         } catch {
             authError = (error as? BackendError)?.message
                 ?? "Couldn’t reach Stór. Check your connection and try again."
         }
+    }
+
+    /// Picks up a session saved on an earlier launch. Any failure leaves the sign-in gate showing.
+    func restoreSession() async {
+        isRestoring = true
+        defer { isRestoring = false }
+        if let session = try? await backend.restoreSession() {
+            await begin(session)
+        }
+    }
+
+    /// Deletes the account; returns why it couldn't, or nil once it is gone and the app is back at the gate.
+    func deleteAccount(_ proof: DeletionProof) async -> String? {
+        do {
+            try await backend.deleteAccount(proof)
+            signOut()
+            return nil
+        } catch BackendError.invalidCredentials {
+            return proof.password == nil ? "Couldn’t confirm it’s you. Try again." : "That password isn’t right."
+        } catch {
+            return (error as? BackendError)?.message ?? "Couldn’t reach Stór. Check your connection and try again."
+        }
+    }
+
+    private func begin(_ session: AuthSession) async {
+        userEmail = session.email
+        signInMethod = session.method
+        hasCompletedSetup = session.hasCompletedSetup
+        onboardingStep = 0
+        loadState = .loading
+        isAuthenticated = true
+        await loadHousehold()
+    }
+
+    /// Clears everything the account loaded; the server revoke is best-effort.
+    func signOut() {
+        let backend = backend
+        Task { try? await backend.signOut() }
+        isAuthenticated = false
+        userEmail = ""
+        signInMethod = .password
+        hasCompletedSetup = false
+        onboardingStep = 0
+        snapshot = .empty
+        plan = .empty(month: planMonth)
+        addedTransactions = []
+        syncError = nil
+        authError = nil
+        selectedTab = .home
+        homePath = []
+        wealthPath = []
+        ledger = .joint
+        feedFilter = nil
+        selectedRecapID = nil
+        cancelAddSpend()
     }
 
     // MARK: - Setup flow

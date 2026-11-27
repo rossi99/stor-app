@@ -10,6 +10,8 @@ struct SpendDraft {
     var ledger: Ledger = .joint
     /// Your share as a percentage, when the spend settles against the joint pot.
     var splitPercent: Int = 50
+    /// The you/partner split only applies to a household of two.
+    var splitsWithPartner = true
 
     static let splitPresets = [0, 50, 100]
 
@@ -31,7 +33,7 @@ struct SpendDraft {
         money.currency.symbol + (entry.isEmpty ? "0" : entry)
     }
 
-    var showsSplit: Bool { ledger == .joint }
+    var showsSplit: Bool { ledger == .joint && splitsWithPartner }
 
     func yourShare(_ money: MoneyFormatter) -> String {
         money(yourAmount, decimals: 2)
@@ -53,8 +55,8 @@ struct SpendDraft {
             actor: actor,
             actorName: name(actor),
             ledger: ledger,
-            tag: ledger == .joint ? "\(splitPercent)/\(100 - splitPercent)" : name(ledger),
-            splitPercent: ledger == .joint ? splitPercent : nil,
+            tag: showsSplit ? "\(splitPercent)/\(100 - splitPercent)" : name(ledger),
+            splitPercent: showsSplit ? splitPercent : nil,
             monogram: "✦",
             isNew: true
         )

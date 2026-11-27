@@ -121,6 +121,30 @@ struct ModelRegressionTests {
         expect(contributions.entries[.you] == "1.234", "Steppers do not silently replace invalid input")
         expect(!state.saveContributions(ContributionDraft(members: [])), "A mismatched household draft cannot save")
 
+        let household = AppState()
+        expect(household.householdSize == 2 && household.ledgers == [.you, .joint, .partner], "A new household is two people")
+        household.ledger = .partner
+        household.householdSize = 4
+        expect(household.ledgers == [.you, .joint, .partner, .third, .fourth], "Growing adds ledgers in household order")
+        expect(household.householdSummary == "Four personal accounts + one joint pot", "Summary counts the people")
+        household.openAddSpend(for: .joint)
+        expect(!household.draft.showsSplit && household.draft.asTransaction().splitPercent == nil, "No you/partner split beyond two people")
+        household.cancelAddSpend()
+        household.householdSize = 5
+        expect(household.householdSize == 4, "More than four people is refused")
+        household.feedFilter = .fourth
+        household.householdSize = 1
+        expect(household.ledgers == [.you, .joint] && household.members.map(\.ledger) == [.you], "A household of one keeps only you and the pot")
+        expect(household.ledger == .joint && household.feedFilter == nil, "Selections on a removed ledger fall back")
+        expect(household.householdSummary == "One personal account + one joint pot", "Summary is singular for one")
+        household.ledger = .you
+        household.openAddSpend()
+        household.draft.entry = "5"
+        household.commitSpend()
+        expect(household.safeToSpend.caption == "Personal allowance.", "Nobody else to see a solo allowance")
+        household.householdSize = 0
+        expect(household.householdSize == 1, "Fewer than one person is refused")
+
         let empty = AppState()
         expect(empty.safeToSpend.isEmpty && empty.envelopes.isEmpty && empty.upcomingBills.isEmpty, "A new household has nothing to show")
         expect(empty.recap == nil && empty.snapshot.netWorth == nil, "A new household has no recap or net worth")
@@ -133,6 +157,97 @@ struct ModelRegressionTests {
         empty.commitSpend()
         expect(empty.envelopes.first?.name == "Groceries" && empty.envelopes.first?.budget == 0, "First spend creates an unbudgeted envelope")
         expect(empty.transactionGroups.first?.label.hasPrefix("Today · ") == true, "A new spend groups under today")
+
+        var goalDraft = GoalDraft(name: "  House deposit ", target: "20000", saved: "", monthly: "250")
+        expect(goalDraft.goal()?.name == "House deposit" && goalDraft.goal()?.saved == 0, "A goal trims its name and starts from nothing")
+        for (target, monthly) in [("0", "250"), ("", "250"), ("abc", "250"), ("20000", ""), ("20000", "-5")] {
+            expect(GoalDraft(name: "Car", target: target, monthly: monthly).goal() == nil, "Reject goal \(target)/\(monthly)")
+        }
+        expect(GoalDraft(name: "  ", target: "100", monthly: "50").goal() == nil, "A goal needs a name")
+        expect(!GoalDraft().hasContent && GoalDraft(target: "1").hasContent, "Any typed goal field is protected")
+        expect(empty.createGoal(goalDraft) && empty.goals.count == 1 && empty.goals[0].monthsToGo == 80, "A valid goal is added")
+        goalDraft.target = "0"
+        expect(!empty.createGoal(goalDraft) && empty.goals.count == 1, "An invalid goal never saves")
+
+        empty.ledger = .joint
+        expect(empty.unbudgetedCategories == SpendDraft.categories, "A new ledger can budget every category")
+        expect(!empty.createEnvelope(EnvelopeDraft(category: "Groceries", budget: "0")), "A zero budget is rejected")
+        expect(!empty.createEnvelope(EnvelopeDraft(category: "Pets", budget: "50")), "Only spend categories become envelopes")
+        expect(empty.createEnvelope(EnvelopeDraft(category: "Groceries", budget: "300")), "An envelope saves on an empty ledger")
+        expect(empty.envelopes.count == 1 && empty.envelopes[0].budget == 300 && close(empty.envelopes[0].spent, 12),
+               "A new budget absorbs earlier unbudgeted spending")
+        expect(close(empty.leftTotal, 288) && !empty.unbudgetedCategories.contains("Groceries"), "Budgeted categories leave the picker")
+        expect(!empty.createEnvelope(EnvelopeDraft(category: "Groceries", budget: "10")), "A category cannot be budgeted twice")
+        empty.ledger = .you
+        expect(empty.envelopes.isEmpty && empty.unbudgetedCategories.contains("Groceries"), "Envelopes belong to one ledger")
+        expect(empty.createEnvelope(EnvelopeDraft(category: "Transport", budget: "80")) && empty.envelopes.count == 1, "A personal envelope saves")
+        empty.ledger = .joint
+        expect(empty.envelopes.count == 1, "A personal envelope stays out of the pot")
+
+        func billDraft(_ name: String, _ amount: String, group: String = "Home") -> BillDraft {
+            var d = BillDraft(); d.name = name; d.amount = amount; d.group = group; return d
+        }
+        expect(billDraft("Rent", "0").bill() == nil && billDraft("", "5").bill() == nil, "A bill needs a name and an amount")
+        expect(billDraft("Rent", "900", group: " ").bill() == nil, "A joint bill needs a pot")
+        var monthsOnly = billDraft("Car tax", "20", group: "Cars")
+        monthsOnly.schedule = .specificMonths
+        expect(monthsOnly.bill() == nil, "Specific months needs at least one month")
+        monthsOnly.months = [9, 1]
+        expect(monthsOnly.bill()?.months == [1, 9] && monthsOnly.bill()?.frequency == .monthly, "Specific months is a sorted monthly bill")
+        var weekly = billDraft("Fuel", "60", group: "Fuel")
+        weekly.schedule = .every(.weekly)
+        weekly.months = [3]
+        expect(weekly.bill()?.months == [] && weekly.bill()?.frequency == .weekly, "Months only travel with specific months")
+        var cash = billDraft("Gym", "30", group: "")
+        cash.paidFrom = .you
+        cash.kind = .loan
+        let gym = cash.bill()
+        expect(gym?.group == "" && gym?.kind == .bill && gym?.category == .discretionary, "A cash-account bill drops pot, type and category")
+        let feb = MonthCalendar(date: Calendar(identifier: .gregorian).date(from: DateComponents(year: 2027, month: 2, day: 10))!)
+        var late = gym!
+        late.dueDay = 31
+        expect(Calendar(identifier: .gregorian).component(.day, from: late.dueDate(in: feb)!) == 28, "Day 31 lands on 28 Feb")
+        late.dueDay = nil
+        expect(late.dueDate(in: feb) == nil, "No due day, no date")
+
+        var rent = billDraft("Council tax", "180")
+        rent.dueDay = MonthCalendar.day(of: empty.month.date)
+        expect(empty.saveBill(rent) && empty.plan.bills.count == 1, "A valid bill saves into the plan")
+        expect(empty.upcomingBills.count == 1, "A bill due today is still upcoming")
+        var edited = BillDraft(empty.plan.bills[0])
+        edited.amount = "190"
+        expect(empty.saveBill(edited) && empty.plan.bills.count == 1 && empty.plan.bills[0].amount == 190, "Saving the same id edits in place")
+        expect(empty.saveBill(cash) && empty.billGroups.map(\.name) == ["Home", "Your cash account"], "Your cash-account bills group last")
+        empty.deleteBill(empty.plan.bills[1])
+        expect(empty.plan.bills.count == 1, "A deleted bill leaves the plan")
+        expect(!empty.saveBudget(BudgetSettings(essentialPct: 50, discretionaryPct: 30, savingPct: 30, loanAllocation: 0)), "Targets must add up to 100")
+        expect(empty.saveBudget(BudgetSettings(essentialPct: 60, discretionaryPct: 20, savingPct: 20, loanAllocation: 300, cashCap: 400))
+               && empty.plan.settings.cashCap == 400, "Valid budget settings save")
+
+        expect(HouseholdMember.initials(of: "Ana María Ruiz") == "AR" && HouseholdMember.initials(of: " sam ") == "S"
+               && HouseholdMember.initials(of: "") == "", "Initials match the server's first-and-last rule")
+        var person = MemberDraft(empty.you)
+        expect(person.pay.isEmpty && person.netPay == 0 && person.isValid, "Blank pay counts as nothing yet")
+        person.pay = "abc"
+        expect(!person.isValid, "Unreadable pay is refused")
+        person.pay = "3580"
+        person.name = String(repeating: "a", count: 61)
+        expect(!person.isValid, "Names stop at 60 characters")
+        person.name = "  Ana Whitfield "
+        expect(empty.hasOpenSeat && empty.saveMembers([person]) && empty.you.name == "Ana Whitfield"
+               && empty.you.initials == "AW" && empty.you.netPay == 3580, "Saving a member updates name, initials and pay")
+        expect(!empty.saveMembers([]) && !empty.saveMembers([{ var d = person; d.pay = "x"; return d }()]), "Invalid member edits never save")
+        let joinError = await empty.joinHousehold(code: "ABCD-EFGH")
+        expect(joinError == BackendError.notFound.message, "Offline, a join explains why it failed")
+
+        await empty.signUp(email: "a@b.c", password: "password1")
+        empty.createGoal(GoalDraft(name: "Car", target: "10", monthly: "1"))
+        empty.selectedTab = .goals
+        empty.feedFilter = .you
+        empty.signOut()
+        expect(!empty.isAuthenticated && empty.userEmail.isEmpty && !empty.hasCompletedSetup, "Sign-out returns to the gate")
+        expect(empty.snapshot == .empty && empty.goals.isEmpty && empty.allTransactions.isEmpty, "Sign-out leaves nothing from the account")
+        expect(empty.selectedTab == .home && empty.feedFilter == nil && empty.ledger == .joint, "The next account starts at home")
 
         func settle(_ condition: () -> Bool) async {
             for _ in 0..<200 where !condition() { try? await Task.sleep(nanoseconds: 5_000_000) }
@@ -155,21 +270,92 @@ struct ModelRegressionTests {
         offline.saveContributions(refused)
         await settle { offline.syncError != nil }
         expect(close(offline.potContribution, pot), "Refused contributions roll back")
+        offline.syncError = nil
+        offline.householdSize = 1
+        await settle { offline.syncError != nil }
+        expect(offline.members.map(\.ledger) == [.you, .partner], "A refused household size rolls back")
+        offline.syncError = nil
+        let goalCount = offline.goals.count
+        offline.createGoal(GoalDraft(name: "Car", target: "5000", monthly: "100"))
+        await settle { offline.syncError != nil }
+        expect(offline.goals.count == goalCount, "A refused goal is removed")
+        offline.syncError = nil
+        offline.ledger = .partner
+        let category = offline.unbudgetedCategories[0]
+        let envelopeCount = offline.envelopes.count
+        offline.createEnvelope(EnvelopeDraft(category: category, budget: "50"))
+        await settle { offline.syncError != nil }
+        expect(offline.envelopes.count == envelopeCount && offline.unbudgetedCategories.contains(category), "A refused envelope is removed")
+        offline.syncError = nil
+        let named = offline.you.name
+        offline.saveMembers([{ var d = MemberDraft(offline.you); d.name = "Someone else"; return d }()])
+        await settle { offline.syncError != nil }
+        expect(offline.you.name == named, "A refused name change rolls back")
+        offline.syncError = nil
+        offline.plan = MockData.plan
+        let billCount = offline.plan.bills.count
+        offline.saveBill({ var d = BillDraft(); d.name = "Gym"; d.amount = "30"; d.group = "Health"; return d }())
+        await settle { offline.syncError != nil }
+        expect(offline.plan.bills.count == billCount, "A refused bill is removed")
+        offline.syncError = nil
+        offline.deleteBill(offline.plan.bills[0])
+        await settle { offline.syncError != nil }
+        expect(offline.plan.bills.count == billCount, "A refused delete puts the bill back")
+        offline.syncError = nil
+        let tick = offline.plan.transfers[2]
+        offline.setTransfer(tick.key, done: !tick.done, month: offline.plan.month)
+        expect(offline.plan.transfers[2].done != tick.done, "A tick shows at once")
+        await settle { offline.syncError != nil }
+        expect(offline.plan.transfers[2].done == tick.done, "A refused tick rolls back")
         let name = offline.snapshot.name
         await offline.loadHousehold()
         expect(offline.loadState == .failed && offline.snapshot.name == name, "A failed load is not an empty household")
         await offline.signIn(email: "a@b.c", password: "secret")
         expect(!offline.isAuthenticated && offline.authError == BackendError.server(500).message, "A failed sign-in stays on the gate")
+        await offline.restoreSession()
+        expect(!offline.isAuthenticated && !offline.isRestoring, "A session that can't be checked leaves the sign-in gate")
+        let expired = AppState(backend: OfflineBackend(failure: .invalidCredentials), snapshot: MockData.snapshot)
+        expired.isAuthenticated = true
+        expired.openAddSpend()
+        expired.draft.entry = "5"
+        expired.commitSpend()
+        await settle { !expired.isAuthenticated }
+        expect(!expired.isAuthenticated && expired.authError == "Your session has ended. Sign in again."
+               && expired.snapshot == .empty, "A rejected session returns to the gate instead of failing every save")
+        let deleteFailure = await offline.deleteAccount(DeletionProof(password: "x"))
+        expect(deleteFailure == BackendError.server(500).message, "A failed deletion explains why")
+        let wrong = await AppState(backend: OfflineBackend(failure: .invalidCredentials)).deleteAccount(DeletionProof(password: "x"))
+        expect(wrong == "That password isn’t right.", "A wrong password is named as such")
+        let stale = await AppState(backend: OfflineBackend(failure: .invalidCredentials)).deleteAccount(DeletionProof(idToken: "t"))
+        expect(stale == "Couldn’t confirm it’s you. Try again.", "A rejected Apple or Google confirmation doesn't blame a password")
         let local = AppState()
+        local.isAuthenticated = true
+        let deleted = await local.deleteAccount(DeletionProof(password: "password1"))
+        expect(deleted == nil && !local.isAuthenticated, "Deleting the account signs out")
+        await local.signIn(provider: .apple, idToken: "t")
+        expect(local.isAuthenticated && local.signInMethod == .apple, "Apple sign-in remembers how to confirm deletion")
+        local.signOut()
+        expect(local.signInMethod == .password, "Signing out forgets the sign-in method")
+        await local.restoreSession()
+        expect(!local.isAuthenticated && !local.isRestoring, "Nothing saved means signing in")
         await local.signUp(email: "a@b.c", password: "password1")
         expect(local.isAuthenticated && !local.hasCompletedSetup && local.loadState == .loaded, "Sign-up continues into setup")
 
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [StubProtocol.self]
-        let http = HTTPBackend(baseURL: URL(string: "https://stor.test/v1")!, session: URLSession(configuration: configuration))
-        StubProtocol.body = Data(#"{"email":"a@b.c","hasCompletedSetup":true,"token":"abc"}"#.utf8)
+        let tokens = MemoryTokenStore()
+        let http = HTTPBackend(baseURL: URL(string: "https://stor.test/v1")!, session: URLSession(configuration: configuration), tokens: tokens)
+        let nothing = try! await http.restoreSession()
+        expect(nothing == nil, "With no saved token there is nothing to restore")
+        StubProtocol.body = Data(#"{"email":"a@b.c","hasCompletedSetup":true,"token":"abc","method":"password"}"#.utf8)
         let session = try! await http.signIn(email: "a@b.c", password: "secret")
         expect(session.hasCompletedSetup && StubProtocol.last?.url?.path == "/v1/auth/sign-in", "Sign-in posts to the contract path")
+        expect(tokens.token == "abc", "Sign-in keeps the token for the next launch")
+        let relaunched = HTTPBackend(baseURL: URL(string: "https://stor.test/v1")!, session: URLSession(configuration: configuration), tokens: tokens)
+        StubProtocol.body = Data(#"{"email":"a@b.c","hasCompletedSetup":true,"method":"password"}"#.utf8)
+        let restored = try! await relaunched.restoreSession()
+        expect(restored?.email == "a@b.c" && StubProtocol.last?.url?.path == "/v1/auth/session"
+               && StubProtocol.last?.value(forHTTPHeaderField: "Authorization") == "Bearer abc", "A relaunch checks the saved token")
         expect(StubProtocol.last?.url?.query == nil, "Credentials never travel in the URL")
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
@@ -190,32 +376,179 @@ struct ModelRegressionTests {
                 expect(error as? BackendError == expected, "A \(status) maps to its error")
             }
         }
+        StubProtocol.status = 200
+        expect(tokens.token == nil, "A rejected token is forgotten")
+        StubProtocol.body = Data(#"{"email":"a@b.c","hasCompletedSetup":true,"token":"abc","method":"password"}"#.utf8)
+        _ = try! await http.signIn(email: "a@b.c", password: "secret")
+        StubProtocol.body = try! encoder.encode(HouseholdSnapshot.empty)
+        var bodies: [String: Data] = [:]
+        StubProtocol.onRequest = { request in
+            let body = request.httpBodyStream.map { stream -> Data in
+                stream.open(); defer { stream.close() }
+                var data = Data(), buffer = [UInt8](repeating: 0, count: 4096)
+                while stream.hasBytesAvailable { let n = stream.read(&buffer, maxLength: buffer.count); if n <= 0 { break }; data.append(buffer, count: n) }
+                return data
+            } ?? request.httpBody ?? Data()
+            bodies["\(request.httpMethod!) \(request.url!.path)"] = body
+        }
+        try! await http.setHouseholdSize(3)
+        let sizeBody = try! JSONSerialization.jsonObject(with: bodies["PUT /v1/household/size"]!) as! [String: Any]
+        expect(sizeBody["size"] as? Int == 3, "Household size travels as {size}")
+        bodies = [:]
+        try! await http.createGoal(GoalDraft(name: "Car", target: "10", monthly: "1").goal(id: "g1")!)
+        try! await http.setEnvelopeBudget(ledger: .joint, name: "Home & repairs", budget: 120)
+        var b1 = billDraft("Rent", "900")
+        b1.id = "b1"
+        b1.dueDay = 28
+        try! await http.saveBill(b1.bill()!)
+        expect(Set(bodies.keys) == ["POST /v1/goals", "PUT /v1/ledgers/joint/envelopes", "PUT /v1/bills/b1"], "Creates use the contract paths")
+        let envelopeBody = try! JSONSerialization.jsonObject(with: bodies["PUT /v1/ledgers/joint/envelopes"]!) as! [String: Any]
+        expect(envelopeBody["name"] as? String == "Home & repairs" && envelopeBody["budget"] as? Double == 120, "Envelope names travel in the body")
+        let billBody = try! JSONSerialization.jsonObject(with: bodies["PUT /v1/bills/b1"]!) as! [String: Any]
+        expect(billBody["id"] as? String == "b1" && billBody["dueDay"] as? Int == 28 && billBody["paidFrom"] as? String == "joint"
+               && billBody["kind"] as? String == "bill" && billBody["frequency"] as? String == "monthly", "Bills travel in the contract's shape")
+        try! await http.deleteBill(id: "b1")
+        try! await http.setTransfer(month: "2027-01", key: "pot:Home", done: true)
+        let tickBody = try! JSONSerialization.jsonObject(with: bodies["PUT /v1/plan/transfers"]!) as! [String: Any]
+        expect(bodies["DELETE /v1/bills/b1"] != nil && tickBody["key"] as? String == "pot:Home" && tickBody["done"] as? Bool == true,
+               "Deletes and ticks use the contract paths")
+        try! await http.saveBudget(BudgetSettings(essentialPct: 50, discretionaryPct: 30, savingPct: 20, loanAllocation: 300, cashCap: nil))
+        expect(bodies["PUT /v1/household/budget"] != nil, "Budget settings use the contract path")
+        StubProtocol.body = try! encoder.encode(MockData.plan)
+        let fetched = try! await http.loadPlan(month: "2027-01")
+        expect(StubProtocol.last?.url?.path == "/v1/plan" && StubProtocol.last?.url?.query == "month=2027-01"
+               && fetched == MockData.plan, "The plan loads by month and round-trips through JSON")
+        StubProtocol.body = Data(#"{"month":"2027-01","hub":"partner","settings":{"essentialPct":50,"discretionaryPct":30,"savingPct":20,"loanAllocation":0,"cashCap":null},"income":0,"loanRepayments":0,"loanOverpay":0,"fixedInvesting":0,"addInvesting":0,"billsAndPots":0,"cashEach":0,"stays":0,"bills":[{"id":"x","name":"Tax","group":"Car","kind":"bill","category":"essential","amount":20,"frequency":"monthly","months":[1],"paidFrom":"joint","dueDay":null,"meta":"","isEstimated":false,"thisMonth":20}],"groups":[],"transfers":[{"key":"pay:1","kind":"payIn","ledger":"partner","amount":5,"done":false}],"split":[],"biggest":[],"cashAccounts":[],"forecast":[]}"#.utf8)
+        let server = try! await http.loadPlan(month: "2027-01")
+        expect(server.hub == .partner && server.settings.cashCap == nil && server.bills[0].dueDay == nil
+               && server.transfers[0].group == nil, "Server plans decode nulls and missing keys")
+        bodies = [:]
+        try! await http.saveMembers([MemberProfile(ledger: .partner, name: "Sam", netPay: 2182.5)])
+        let membersBody = try! JSONSerialization.jsonObject(with: bodies["PUT /v1/household/members"]!) as! [[String: Any]]
+        expect(membersBody.first?["ledger"] as? String == "partner" && membersBody.first?["netPay"] as? Double == 2182.5, "Members travel as [{ledger, name, netPay}]")
+        StubProtocol.body = Data(#"{"code":"ABCD-EFGH","expiresAt":"2026-11-28T12:00:00Z"}"#.utf8)
+        let code = try! await http.createInvite()
+        expect(code.code == "ABCD-EFGH" && StubProtocol.last?.url?.path == "/v1/household/invites", "An invite decodes its code and expiry")
+        StubProtocol.body = Data(#"{"email":"a@b.c","hasCompletedSetup":true,"method":"password"}"#.utf8)
+        let joined = try! await http.joinHousehold(code: "abcd efgh")
+        let joinBody = try! JSONSerialization.jsonObject(with: bodies["POST /v1/household/join"]!) as! [String: Any]
+        expect(joined.hasCompletedSetup && joinBody["code"] as? String == "abcd efgh", "Joining sends the code as typed")
+        for (status, expected) in [(404, BackendError.notFound), (409, .householdUnavailable)] {
+            StubProtocol.status = status
+            do { _ = try await http.joinHousehold(code: "x"); expect(false, "A \(status) join must throw") }
+            catch { expect(error as? BackendError == expected, "A \(status) join maps to its own message") }
+        }
+        StubProtocol.status = 409
+        do { _ = try await http.createInvite(); expect(false, "A full household must throw") }
+        catch { expect(error as? BackendError == .householdFull, "A 409 invite means nobody's seat is free") }
+        StubProtocol.status = 429
+        do { _ = try await http.signIn(email: "a@b.c", password: "x"); expect(false, "A 429 must throw") }
+        catch { expect(error as? BackendError == .tooManyAttempts, "A 429 asks the user to wait") }
+        StubProtocol.status = 200
+        StubProtocol.body = try! encoder.encode(HouseholdSnapshot.empty)
+        try! await http.signOut()
+        expect(StubProtocol.last?.url?.path == "/v1/auth/sign-out"
+               && StubProtocol.last?.value(forHTTPHeaderField: "Authorization") == "Bearer abc", "Sign-out revokes the current token")
+        expect(tokens.token == nil, "Sign-out forgets the saved token")
+        StubProtocol.body = Data(#"{"email":"a@b.c","hasCompletedSetup":true,"token":"abc","method":"password"}"#.utf8)
+        _ = try! await http.signIn(email: "a@b.c", password: "secret")
+        StubProtocol.status = 401
+        do {
+            try await http.deleteAccount(DeletionProof(password: "x"))
+            expect(false, "A rejected deletion must throw")
+        } catch {
+            expect(error as? BackendError == .invalidCredentials && tokens.token == "abc",
+                   "A rejected deletion proof keeps the session so the user can try again")
+        }
+        StubProtocol.status = 200
+        bodies = [:]
+        try! await http.deleteAccount(DeletionProof(password: "secret"))
+        let deleteBody = try! JSONSerialization.jsonObject(with: bodies["DELETE /v1/auth/account"]!) as! [String: Any]
+        expect(deleteBody as? [String: String] == ["password": "secret"] && tokens.token == nil, "Deleting sends only the password and forgets the token")
+        StubProtocol.body = Data(#"{"email":"x1@privaterelay.appleid.com","hasCompletedSetup":false,"token":"apl","method":"apple"}"#.utf8)
+        let apple = try! await http.signIn(provider: .apple, idToken: "id-1")
+        let providerBody = try! JSONSerialization.jsonObject(with: bodies["POST /v1/auth/provider"]!) as! [String: Any]
+        expect(apple.method == .apple && tokens.token == "apl" && providerBody["provider"] as? String == "apple"
+               && providerBody["idToken"] as? String == "id-1", "Provider sign-in posts the ID token and keeps the session")
+        try! await http.deleteAccount(DeletionProof(idToken: "id-2", authorizationCode: "code-1"))
+        let providerDelete = try! JSONSerialization.jsonObject(with: bodies["DELETE /v1/auth/account"]!) as! [String: Any]
+        expect(providerDelete as? [String: String] == ["idToken": "id-2", "authorizationCode": "code-1"] && tokens.token == nil,
+               "Deletion sends the provider proof without a password")
+
+        expect(GoogleSignIn.challenge(for: "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk") == "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+               "PKCE matches RFC 7636's example")
+        let google = GoogleSignIn(clientID: "123-abc.apps.googleusercontent.com")
+        let authorize = URLComponents(url: google.authorizeURL, resolvingAgainstBaseURL: false)!.queryItems!
+        let query = Dictionary(uniqueKeysWithValues: authorize.map { ($0.name, $0.value ?? "") })
+        expect(google.redirectScheme == "com.googleusercontent.apps.123-abc"
+               && query["redirect_uri"] == "com.googleusercontent.apps.123-abc:/oauthredirect"
+               && query["code_challenge"] == GoogleSignIn.challenge(for: google.verifier) && query["code_challenge_method"] == "S256"
+               && query["state"] == google.state && google.verifier.count == 43 && query["scope"] == "openid email", "Google is asked for a PKCE code back to the reversed client ID")
+        let stub = URLSession(configuration: configuration)
+        do {
+            _ = try await google.idToken(from: URL(string: "com.googleusercontent.apps.123-abc:/oauthredirect?code=c1&state=forged")!, session: stub)
+            expect(false, "A forged state must throw")
+        } catch {
+            expect(error as? BackendError == .invalidCredentials, "A redirect with another state is refused")
+        }
+        StubProtocol.body = Data(#"{"id_token":"google-id"}"#.utf8)
+        let googleToken = try! await google.idToken(from: URL(string: "com.googleusercontent.apps.123-abc:/oauthredirect?code=c1&state=\(google.state)")!, session: stub)
+        let exchange = String(data: bodies["POST /token"]!, encoding: .utf8)!
+        expect(googleToken == "google-id" && exchange.contains("code_verifier=\(google.verifier)")
+               && exchange.contains("code=c1"), "The code is swapped for an ID token with the PKCE verifier")
+        StubProtocol.body = try! encoder.encode(HouseholdSnapshot.empty)
+        _ = try! await http.loadHousehold()
+        expect(StubProtocol.last?.value(forHTTPHeaderField: "Authorization") == nil, "Signed-out requests carry no token")
         print("Passed \(checks) model regression checks")
     }
 }
 
 struct OfflineBackend: StorBackend {
-    func signIn(email: String, password: String) async throws -> AuthSession { throw BackendError.server(500) }
-    func signUp(email: String, password: String) async throws -> AuthSession { throw BackendError.server(500) }
-    func loadHousehold() async throws -> HouseholdSnapshot { throw BackendError.server(500) }
-    func addSpend(_ spend: Transaction) async throws { throw BackendError.server(500) }
-    func saveContributions(_ contributions: [Ledger: Double]) async throws { throw BackendError.server(500) }
-    func setGoalMonthly(id: String, monthly: Double) async throws { throw BackendError.server(500) }
-    func setLinkedAccounts(_ ids: Set<String>) async throws { throw BackendError.server(500) }
-    func setTopUpDay(_ day: Int) async throws { throw BackendError.server(500) }
-    func completeSetup() async throws { throw BackendError.server(500) }
+    var failure = BackendError.server(500)
+    func signIn(email: String, password: String) async throws -> AuthSession { throw failure }
+    func signUp(email: String, password: String) async throws -> AuthSession { throw failure }
+    func signIn(provider: SignInMethod, idToken: String) async throws -> AuthSession { throw failure }
+    func loadHousehold() async throws -> HouseholdSnapshot { throw failure }
+    func addSpend(_ spend: Transaction) async throws { throw failure }
+    func saveContributions(_ contributions: [Ledger: Double]) async throws { throw failure }
+    func saveMembers(_ profiles: [MemberProfile]) async throws { throw failure }
+    func createInvite() async throws -> Invite { throw failure }
+    func joinHousehold(code: String) async throws -> AuthSession { throw failure }
+    func setGoalMonthly(id: String, monthly: Double) async throws { throw failure }
+    func signOut() async throws { throw failure }
+    func restoreSession() async throws -> AuthSession? { throw failure }
+    func deleteAccount(_ proof: DeletionProof) async throws { throw failure }
+    func createGoal(_ goal: Goal) async throws { throw failure }
+    func setEnvelopeBudget(ledger: Ledger, name: String, budget: Double) async throws { throw failure }
+    func saveBill(_ bill: Bill) async throws { throw failure }
+    func deleteBill(id: String) async throws { throw failure }
+    func loadPlan(month: String) async throws -> BudgetPlan { throw failure }
+    func setTransfer(month: String, key: String, done: Bool) async throws { throw failure }
+    func saveBudget(_ settings: BudgetSettings) async throws { throw failure }
+    func setLinkedAccounts(_ ids: Set<String>) async throws { throw failure }
+    func setTopUpDay(_ day: Int) async throws { throw failure }
+    func setHouseholdSize(_ size: Int) async throws { throw BackendError.server(409) }
+    func completeSetup() async throws { throw failure }
+}
+
+final class MemoryTokenStore: TokenStore, @unchecked Sendable {
+    var token: String?
+    func load() -> String? { token }
+    func save(_ token: String?) { self.token = token }
 }
 
 final class StubProtocol: URLProtocol {
     nonisolated(unsafe) static var body = Data()
     nonisolated(unsafe) static var status = 200
     nonisolated(unsafe) static var last: URLRequest?
+    nonisolated(unsafe) static var onRequest: (URLRequest) -> Void = { _ in }
 
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     override func stopLoading() {}
     override func startLoading() {
         Self.last = request
+        Self.onRequest(request)
         let response = HTTPURLResponse(url: request.url!, statusCode: Self.status, httpVersion: nil, headerFields: nil)!
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
         client?.urlProtocol(self, didLoad: Self.body)

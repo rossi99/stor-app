@@ -27,6 +27,8 @@ struct AuthView: View {
         return mode == .signIn ? !password.isEmpty : password.count >= 8
     }
 
+    @State private var showsPrivacy = false
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
@@ -42,6 +44,14 @@ struct AuthView: View {
                         .onboardingBody()
                         .frame(maxWidth: 300, alignment: .leading)
                         .padding(.bottom, Spacing.xxl)
+
+                    ProviderButtons(methods: [.apple, .google]) { method, token, _ in
+                        await appState.signIn(provider: method, idToken: token)
+                    } onFailure: { appState.authError = $0 }
+
+                    MonoLabel("or with email", size: 10.5, tracking: 0.14, color: .storTertiaryLabel)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, Spacing.xl)
 
                     fields
                 }
@@ -66,6 +76,12 @@ struct AuthView: View {
                     }
                 }
                 .padding(.top, Spacing.xxl - 2)
+
+                Button("How Stór uses your data") { showsPrivacy = true }
+                    .storText(14)
+                    .foregroundStyle(Color.storSecondaryLabel)
+                    .frame(maxWidth: .infinity, minHeight: 44)
+                    .padding(.top, Spacing.md)
             }
             .padding(.horizontal, Spacing.xxl)
             .padding(.top, Spacing.xxl)
@@ -76,6 +92,7 @@ struct AuthView: View {
         .scrollDismissesKeyboard(.interactively)
         .background(Color.storBackground)
         .animation(.easeInOut(duration: 0.25), value: mode)
+        .sheet(isPresented: $showsPrivacy) { PrivacyView() }
     }
 
     private var caption: String {

@@ -22,7 +22,6 @@ enum MockData {
             transactions: transactions,
             goals: goals,
             emergencyFund: EmergencyFund(months: 4.2, note: "Target is 6 months. At £600/mo you reach it in about 14 months."),
-            bills: bills,
             netWorth: netWorth,
             accountGroups: accountGroups,
             recaps: recaps,
@@ -81,6 +80,8 @@ enum MockData {
                 Envelope(name: "Gifts",           spent:  35, budget:  60, detail: "Sam's mum",      pace: "42% left"),
                 Envelope(name: "Unallocated",     spent:  80, budget: 200, detail: "No envelope",    pace: "—"),
             ]
+        case .third, .fourth:
+            envelopes = []
         case .partner:
             envelopes = [
                 Envelope(name: "Cycling",         spent: 214, budget: 180, detail: "New wheelset", pace: "over by 19%"),

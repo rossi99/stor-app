@@ -5,11 +5,23 @@ struct HouseholdView: View {
     @Environment(\.money) private var money
     @Environment(\.dismiss) private var dismiss
     @State private var editor: Editor?
+    @State private var showsSignOut = false
 
-    private enum Editor: String, Identifiable {
-        case contributions, accounts
-        var id: String { rawValue }
-        var title: String { self == .contributions ? "Monthly contributions" : "Linked accounts" }
+    private enum Editor: Identifiable, Hashable {
+        case contributions, accounts, invite, budget, privacy, deleteAccount
+        case member(Ledger)
+
+        var id: String {
+            switch self {
+            case .contributions: "contributions"
+            case .accounts: "accounts"
+            case .invite: "invite"
+            case .budget: "budget"
+            case .privacy: "privacy"
+            case .deleteAccount: "deleteAccount"
+            case .member(let ledger): "member.\(ledger.rawValue)"
+            }
+        }
     }
 
     var body: some View {
@@ -18,17 +30,24 @@ struct HouseholdView: View {
             BackHeader(title: "Household") { dismiss() }
             Form {
                 Section("Your household") {
+                    Picker("People in household", selection: $state.householdSize) {
+                        ForEach(1...4, id: \.self) { count in Text("\(count)").tag(count) }
+                    }
                     ForEach(appState.members) { member in
-                        VStack(alignment: .leading, spacing: Spacing.xs) {
-                            Text(member.displayName).font(.headline)
-                            Text("\(money(member.contribution)) per month")
-                                .foregroundStyle(Color.storSecondaryLabel)
+                        Button { editor = .member(member.ledger) } label: {
+                            settingLink(member.displayName,
+                                        value: "\(money(member.netPay)) take-home · \(money(member.contribution)) to the pot")
                         }
-                        .padding(.vertical, Spacing.xxs)
+                        .accessibilityHint("Edit name and take-home pay")
+                    }
+                    if appState.hasOpenSeat {
+                        Button { editor = .invite } label: {
+                            Label("Invite to household", systemImage: "person.badge.plus").frame(minHeight: 44)
+                        }
                     }
                 }
                 Section("Shared spending") {
-                    DisclosureGroup("Two personal accounts + one joint pot") {
+                    DisclosureGroup(appState.householdSummary) {
                         Text("Personal spending has its own budget. Shared costs come out of the joint pot, funded by your monthly contributions.")
                     }
                     Button { editor = .contributions } label: {
@@ -36,6 +55,11 @@ struct HouseholdView: View {
                     }
                     Button { editor = .accounts } label: {
                         settingLink("Linked accounts", value: appState.linkedAccounts.isEmpty ? "None yet" : "\(appState.linkedAccounts.count)")
+                    }
+                    Button { editor = .budget } label: {
+                        let s = appState.plan.settings
+                        settingLink("Budget settings", value: "\(s.essentialPct)/\(s.discretionaryPct)/\(s.savingPct)"
+                                    + (s.cashCap.map { " · cash capped at \(money($0))" } ?? ""))
                     }
                     Picker("Planned top-up day", selection: $state.topUpDay) {
                         ForEach(1...28, id: \.self) { day in Text("Day \(day)").tag(day) }
@@ -54,22 +78,47 @@ struct HouseholdView: View {
                 } footer: {
                     Text("Hide balances and transaction amounts on screen. The payslip check appears in your monthly recap.")
                 }
+                Section {
+                    Button("Privacy") { editor = .privacy }
+                        .frame(minHeight: 44)
+                    Button("Sign out", role: .destructive) { showsSignOut = true }
+                        .frame(minHeight: 44)
+                    Button("Delete account", role: .destructive) { editor = .deleteAccount }
+                        .frame(minHeight: 44)
+                } footer: {
+                    if !appState.userEmail.isEmpty { Text("Signed in as \(appState.userEmail)") }
+                }
             }
             .scrollContentBackground(.hidden)
         }
         .background(Color.storBackground)
         .navigationBarBackButtonHidden()
         .toolbar(.hidden, for: .navigationBar)
+        .confirmationDialog("Sign out of Stór?", isPresented: $showsSignOut, titleVisibility: .visible) {
+            Button("Sign out", role: .destructive) { appState.signOut() }
+            Button("Cancel", role: .cancel) { }
+        }
         .sheet(item: $editor) { selected in
-            if selected == .contributions {
+            switch selected {
+            case .contributions:
                 ContributionSettingsSheet(members: appState.members)
-            } else {
+            case .invite:
+                InviteSheet()
+            case .budget:
+                BudgetSettingsSheet(settings: appState.plan.settings)
+            case .privacy:
+                PrivacyView()
+            case .deleteAccount:
+                DeleteAccountSheet()
+            case .member(let ledger):
+                MemberSheet(member: appState.member(ledger))
+            case .accounts:
                 NavigationStack {
                     ScrollView {
                         LinkAccountsStep(showsHeading: false).padding(Spacing.screen)
                     }
                     .background(Color.storBackground)
-                    .navigationTitle(selected.title)
+                    .navigationTitle("Linked accounts")
                     .navigationBarTitleDisplayMode(.inline)
                     .toolbar {
                         ToolbarItem(placement: .confirmationAction) { Button("Done") { editor = nil } }

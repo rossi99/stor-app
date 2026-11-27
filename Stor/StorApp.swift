@@ -2,7 +2,11 @@ import SwiftUI
 
 @main
 struct StorApp: App {
-    @State private var appState = AppState(backend: BackendConfig.live())
+    @State private var appState: AppState = {
+        let state = AppState(backend: BackendConfig.live())
+        state.isRestoring = true
+        return state
+    }()
 
     init() {
         Typography.configureNavigationBar()
@@ -11,7 +15,11 @@ struct StorApp: App {
     var body: some Scene {
         WindowGroup {
             Group {
-                if !appState.isAuthenticated {
+                if appState.isRestoring {
+                    ProgressView()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .background(Color.storBackground)
+                } else if !appState.isAuthenticated {
                     AuthView()
                 } else if appState.loadState == .loading {
                     ProgressView("Loading your household")
@@ -40,6 +48,7 @@ struct StorApp: App {
             } message: {
                 Text(appState.syncError ?? "")
             }
+            .task { await appState.restoreSession() }
             .environment(appState)
             .environment(\.money, appState.money)
             .animation(.easeInOut(duration: 0.3), value: appState.hasCompletedSetup)

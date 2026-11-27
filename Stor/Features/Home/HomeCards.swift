@@ -29,6 +29,33 @@ struct EnvelopeSummaryCard: View {
     }
 }
 
+/// This month's cash each and how far through the payday transfers you are.
+struct PlanPreviewCard: View {
+    @Environment(AppState.self) private var appState
+    @Environment(\.money) private var money
+
+    var body: some View {
+        let plan = appState.plan
+        let done = plan.transfers.filter(\.done).count
+        NavigationLink(value: Route.plan) {
+            LabelledCard(label: "Payday plan",
+                         trailingText: plan.transfers.isEmpty ? nil : "\(done) of \(plan.transfers.count) done") {
+                if plan.income == 0 && plan.bills.isEmpty {
+                    EmptyCardNote(text: "Add take-home pay and bills to see what each of you keeps this month.")
+                } else {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("\(money(plan.cashEach)) each").storDisplay(22).foregroundStyle(Color.storInk)
+                        Text("after \(money(plan.billsAndPots)) of bills and pots and \(money(plan.invested)) invested")
+                            .storText(13).foregroundStyle(Color.storSecondaryLabel)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+    }
+}
+
 /// The three bills nearest to leaving the pot.
 struct BillsPreviewCard: View {
     @Environment(AppState.self) private var appState
@@ -39,15 +66,18 @@ struct BillsPreviewCard: View {
     }
 
     private var trailing: String {
-        let total = upcoming.reduce(0) { $0 + $1.amount }
-        return "\(money(total)) by \(MonthCalendar.format(upcoming.last?.dueDate ?? appState.month.date, "d MMM"))"
+        let total = upcoming.reduce(0) { $0 + $1.thisMonth }
+        return "\(money(total)) by \(MonthCalendar.format(upcoming.last?.dueDate(in: appState.month) ?? appState.month.date, "d MMM"))"
     }
 
     var body: some View {
         if upcoming.isEmpty {
-            LabelledCard(label: "Upcoming shared bills") {
-                EmptyCardNote(text: "No bills due. Shared bills will show here before they leave the pot.")
+            NavigationLink(value: Route.bills) {
+                LabelledCard(label: "Upcoming shared bills") {
+                    EmptyCardNote(text: "No bills due. Add your shared bills so they show here before they leave the pot.")
+                }
             }
+            .buttonStyle(.plain)
         } else {
             billsCard
         }
@@ -77,10 +107,10 @@ struct BillsPreviewCard: View {
 
     private func billTile(_ bill: Bill) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            MonoLabel(MonthCalendar.format(bill.dueDate, "EEE d").uppercased(), size: 10, tracking: 0.06,
+            MonoLabel(MonthCalendar.format(bill.dueDate(in: appState.month) ?? appState.month.date, "EEE d").uppercased(), size: 10, tracking: 0.06,
                       color: .storTertiaryLabel)
 
-            Text(money(bill.amount))
+            Text(money(bill.thisMonth))
                 .storText(13, weight: .medium)
                 .tracking(-0.13)
                 .foregroundStyle(Color.storInk)

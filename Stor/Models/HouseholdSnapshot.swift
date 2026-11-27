@@ -9,7 +9,7 @@ struct LedgerSummary: Codable, Equatable, Sendable {
     /// Bills still to leave this ledger this month.
     let committed: Double
     let unbudgeted: Double
-    let envelopes: [Envelope]
+    var envelopes: [Envelope]
 }
 
 struct NetWorthPoint: Codable, Equatable, Identifiable, Sendable {
@@ -41,7 +41,6 @@ struct HouseholdSnapshot: Codable, Equatable, Sendable {
     var transactions: [Transaction]
     var goals: [Goal]
     var emergencyFund: EmergencyFund?
-    var bills: [Bill]
     var netWorth: NetWorth?
     /// Liabilities are the groups with no ledger.
     var accountGroups: [AccountGroup]
@@ -62,7 +61,6 @@ struct HouseholdSnapshot: Codable, Equatable, Sendable {
         transactions: [],
         goals: [],
         emergencyFund: nil,
-        bills: [],
         netWorth: nil,
         accountGroups: [],
         recaps: [],

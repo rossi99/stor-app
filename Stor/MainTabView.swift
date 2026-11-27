@@ -35,6 +35,7 @@ private extension View {
             case .alerts: AlertsView()
             case .household: HouseholdView()
             case .recap: RecapView()
+            case .plan: PlanView()
             }
         }
         .toolbar(.hidden, for: .navigationBar)

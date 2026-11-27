@@ -25,6 +25,8 @@ struct SegmentedPill<Value: Hashable>: View {
                         Text(label(option))
                             .storText(13, weight: isOn ? .semibold : .medium)
                             .tracking(-0.065)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.75)
                     }
                     .frame(maxWidth: .infinity)
                     .frame(minHeight: max(44, height))

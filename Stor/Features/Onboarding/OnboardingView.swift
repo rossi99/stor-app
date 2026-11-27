@@ -7,6 +7,7 @@ struct OnboardingView: View {
 
     @State private var contributions = ContributionDraft(members: [])
     @State private var hasLoadedContributions = false
+    @State private var people: [MemberDraft] = []
 
     var body: some View {
         NavigationStack {
@@ -17,7 +18,7 @@ struct OnboardingView: View {
                 ScrollView {
                     Group {
                         switch appState.onboardingStep {
-                        case 0:  MoneyModelStep()
+                        case 0:  MoneyModelStep(people: $people)
                         case 1:  LinkAccountsStep()
                         default: FundPotStep(draft: $contributions)
                         }
@@ -36,6 +37,12 @@ struct OnboardingView: View {
             .background(Color.storBackground)
             .toolbar(.hidden, for: .navigationBar)
             .animation(.easeInOut(duration: 0.25), value: appState.onboardingStep)
+            .onChange(of: appState.members.map(\.ledger)) {
+                contributions = ContributionDraft(members: appState.members)
+            }
+            .onChange(of: appState.members, initial: true) {
+                people = MemberDraft.drafts(for: appState.members)
+            }
             .onAppear {
                 if !hasLoadedContributions {
                     contributions = ContributionDraft(members: appState.members)
@@ -71,8 +78,11 @@ struct OnboardingView: View {
 
             PrimaryButton(
                 title: appState.onboardingStep < 2 ? "Continue" : "Open the app",
-                isEnabled: appState.onboardingStep < 2 || contributions.isValid
+                isEnabled: appState.onboardingStep == 0 ? people.allSatisfy(\.isValid)
+                    : appState.onboardingStep < 2 || contributions.isValid
             ) {
+                if appState.onboardingStep == 0 && people != MemberDraft.drafts(for: appState.members)
+                    && !appState.saveMembers(people) { return }
                 if appState.onboardingStep == 2 && !appState.saveContributions(contributions) { return }
                 appState.advanceOnboarding()
             }

@@ -114,7 +114,7 @@ struct LocalBackend: StorBackend {
 
 enum BackendConfig {
     /// The Google Cloud iOS OAuth client ID; empty hides Google sign-in.
-    static let googleClientID = ""
+    static let googleClientID = "147995233320-fv4lcrjtco3t9b43grm90er0223sip8i.apps.googleusercontent.com"
 
     /// Debug builds take `-useFixtures` or a `STOR_API_URL` environment variable.
     /// shortcut: Release has no server URL, set one here when the API is deployed.
